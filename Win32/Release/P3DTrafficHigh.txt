@@ -1,0 +1,3 @@
+<LivingWorldRegion RegionID="R" RightSideDrive="TRUE">
+			<!-- Tropics American -->
+			<FreewayTraffic TrafficSpeed="100">

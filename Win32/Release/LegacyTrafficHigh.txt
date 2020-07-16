@@ -1,0 +1,5 @@
+<LivingWorldRegion>
+      <RegionID>R</RegionID>
+      <RightSideDrive>true</RightSideDrive>
+      <FreewayTraffic>
+        <TrafficSpeed>100.000</TrafficSpeed>
