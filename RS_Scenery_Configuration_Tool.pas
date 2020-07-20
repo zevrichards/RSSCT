@@ -90,7 +90,7 @@ type
     HighPolyVegToggleSwitch: TToggleSwitch;
     DLImage7: TImage;
     ACMInfoImage: TImage;
-    InstalledSims: TTabSheet;
+    InstalledSimsTab: TTabSheet;
     SimsFlowPanel: TFlowPanel;
     SimLabel: TLabel;
     P3Dv4Button: TButton;
@@ -391,6 +391,7 @@ type
     procedure CommonShow(Sender: TObject);
     procedure TBPBGrassLoadDistanceTrackBarChange(Sender: TObject);
     procedure P3Dv5ButtonClick(Sender: TObject);
+    procedure InstalledSimsTabShow(Sender: TObject);
 
 
   private
@@ -413,7 +414,7 @@ type
     sim, simpath, LWCFGpath, sceneryCFGPath, AddonXML,
     managerURL, URL, downloadedfilename, PatchingProduct: string;
 
-    ProgramDataPaths,AppDataPaths: array [0..6] of string;
+    ProgramDataPaths,AppDataPaths: array [0..7] of string;
     PatchURLs: array [0..7] of string;
     InstalledProducts: Tarray<Integer>;
     SODEProductArray: array [0..1] of TSODEProduct;
@@ -593,8 +594,6 @@ begin
     AddonXML := GetSpecialFolder(CSIDL_PROFILE)+'Documents\Prepar3D v'+v+' Add-ons\Richer Simulations\Add-on.xml';
 
   sim := simulator;
-  If sim = 'p3dv5' then
-    sim := 'p3dv4';
   Simpath := GetSimPath(simkeys64[simindex], simkeys32[simindex]);
   If ContainsText(sim, 'xp11') then
   begin
@@ -795,17 +794,18 @@ end;
 procedure TMainForm.ACMButtonClick(Sender: TObject);
 var hint: string;
     Rslt: TSearchRec;
-    ACMLocation: string;
+    ACMAddonXML, ACMLocation: string;
 begin
 
-  If CheckforAgnMrgrInstall(sim, AddonXML, LWCFGPath, ACMLocation) < GetAppVersionInt('AutogenConfigurationMerger.exe') then
+  ACMAddonXML := ReplaceStr(AddonXML,'Richer Simulations','AutogenConfigurationMerger');
+  If CheckforAgnMrgrInstall(sim, ACMAddonXML, LWCFGPath, ACMLocation) < GetAppVersionInt('AutogenConfigurationMerger.exe') then
   begin
     DeleteWithUndo(ACMLocation);
     MessageDlg('Autogen Configuration Merger v'+GetAppVersionStr('AutogenConfigurationMerger.exe')+' will now be installed to ensure Autogen works correctly.', mtInformation, [mbOK], 0);
     If RunProgramWaiting('AutogenConfigurationMerger.exe','', ['"install"', '"'+sim+'"'])<>-1 then
     begin
       Sleep(2000);
-      If CheckforAgnMrgrInstall(sim, AddonXML, LWCFGPath, ACMLocation) >= GetAppVersionInt('AutogenConfigurationMerger.exe') then
+      If CheckforAgnMrgrInstall(sim, ACMAddonXML, LWCFGPath, ACMLocation) >= GetAppVersionInt('AutogenConfigurationMerger.exe') then
       begin
         MessageDlg('Success!', mtInformation, [mbOK], 0);
         {ACMInfoImage.Picture.LoadFromFile('Images/AgnMrgrInstalled.png')}
@@ -841,8 +841,8 @@ begin
     ACMInfoImage.hint := hint;
   end;
 
-  /////////////////////////////////////////These lines will need to be done if the version is not P34 ///////////////////////////////////////////
-  if sim <> 'p3dv4' then
+  /////////////////////////////////////////These lines will need to be done if the version is not P3v4 or P3v5////////////////////////////////
+  if isLegacySim(sim) then
   begin
     If FindFirst(SimPath+'texture\RS_*.*',faAnyFile,Rslt) <> 0 then  //returns 0 if found
       CopyFiles(RSCommonInstallLocation+'Autogen\texture\*', simpath+'texture\', FOF_NOCONFIRMATION);
@@ -1009,8 +1009,16 @@ begin
     CheckForRSCommonConflicts;
     {-----housekeeping from old versions-------}
 
+    //place Downloading GIF and ProgressBar back in original position
+    ProgressBarDownload2.Parent := TabPanel;
+    DownloadingImage.Parent := TabPanel;
 
-    DownloadGif := DownloadingImage.Picture.Graphic as TGIFImage;
+    //reorder items
+    ProgressBarDownload2.Top := 0;
+    CommonButton.Top := 0;
+    DownloadManagerButton.Top := 0;
+    CaribSkyButton.Top := 0;
+    DownloadingImage.Top := ProgressBarDownload2.Top + ProgressBarDownload2.height +1;
 
     //disable products not available for xp
     If sim = 'xp11' then
@@ -1027,12 +1035,12 @@ begin
 
     EnableProductImages(InstalledProducts);
 
-    //TaskCheckForUpdates in background thread
-    TThread.Synchronize(nil,
-            procedure
-            begin
-              CheckForUpdates;
-            end);
+//    //TaskCheckForUpdates in background thread
+//    TThread.Synchronize(nil,
+//            procedure
+//            begin
+//              CheckForUpdates;
+//            end);
 
   end;
 
@@ -1044,8 +1052,8 @@ begin
     For Product in SODEProductArray do
       SODEFileCheck(Product);
 
-    //enable Legacy Patch buttons for each product if the sim is not P34
-    If sim <> 'p3dv4' then
+    //enable Legacy Patch buttons for each product if the sim is not P34/5
+    If isLegacySim(sim) then
     begin
       For Product in SODEProductArray do
         LegacyPatchButtonsEnable(Product);
@@ -1241,7 +1249,7 @@ begin
       else
       begin
         SetLength(products, length(RSProducts));
-        move(RSProducts[Low(RSProducts)], products[Low(products)], SizeOf(RSproducts));
+        move(RSProducts[Low(RSProducts)], products[Low(products)], SizeOf(RSproducts)); //this is an array copy
       end;
 
       For x:= 0 to length(products)-1 do
@@ -1265,14 +1273,14 @@ begin
 //          AddToSceneryLibrary(x, SceneryCFGPath+'scenery_packs.ini', d)
         else
         begin
-          If sim <> 'p3dv4' then
+          If isLegacySim(sim) then
             AddToSceneryLibrary(x, sceneryCFGPath+'scenery.cfg', d);
         end;
 
       end;
 
       //add searched products to add.xml
-      If sim = 'p3dv4' then
+      If not isLegacySim(sim) then
       begin
 
         SL := TStringList.Create;
@@ -1404,6 +1412,10 @@ begin
   //EnableMenuItem( GetSystemMenu( handle, False ),SC_CLOSE, MF_BYCOMMAND or MF_GRAYED );
   {application.onException := MyException;}
 
+  //place Downloading GIF and ProgressBar on Sim Selection page temporarily
+  DownloadingImage.Parent := InstalledSimsTab;
+  ProgressBarDownload2.Parent := InstalledSimsTab;
+
   DeleteFile('RSSCT.bak');
 
 //  ProgramDataPaths[0]:= GetEnvironmentVariable('Homepath')+'\My Documents\Prepar3D v4 Add-ons\' ;
@@ -1413,7 +1425,8 @@ begin
   ProgramDataPaths[3]:= GetEnvironmentVariable('ProgramData')+'\Lockheed Martin\Prepar3D\';
   ProgramDataPaths[4]:= GetEnvironmentVariable('ProgramData')+'\Microsoft\FSX-SE\';
   ProgramDataPaths[5]:= GetEnvironmentVariable('ProgramData')+'\Microsoft\FSX\';
-  ProgramDataPaths[6]:= GetEnvironmentVariable('ProgramData')+'\Lockheed Martin\Prepar3D v5\';
+  ProgramDataPaths[6]:= '';   //space for XP11
+  ProgramDataPaths[7]:= GetEnvironmentVariable('ProgramData')+'\Lockheed Martin\Prepar3D v5\';
 
   AppDataPaths[0]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v4\' ;
   AppDataPaths[1]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v3\';
@@ -1421,7 +1434,8 @@ begin
   AppDataPaths[3]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D\';
   AppDataPaths[4]:= GetEnvironmentVariable('AppData')+'\Microsoft\FSX-SE\';
   AppDataPaths[5]:= GetEnvironmentVariable('AppData')+'\Microsoft\FSX\';
-  AppDataPaths[6]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v5\' ;
+  AppDataPaths[6]:= '' ;   //space for XP11
+  AppDataPaths[7]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v5\' ;
 
   for i := 0 to SettingsPageControl.PageCount - 1 do
       SettingsPageControl.Pages[i].TabVisible := False;
@@ -1436,8 +1450,6 @@ begin
       end;
   1:  begin
         s := supportedsims[InstalledSims[0]];
-//        If s = 'p3dv5' then                    //treat p3dv5 exactly the same as p3dv4
-//          s := 'p3dv4';
         SetGlobalVariables(s, InstalledSims[0]);
         SettingsPageControl.ActivePageIndex := 2;
       end
@@ -1582,58 +1594,6 @@ begin
 
 end;
 
-{//This was previously used to reposition Light images as the form was resized. Decided to just use a static form size.
-procedure TMainForm.FormResize(Sender: TObject);
-var    x: integer;
-
-const DLLeftValues: array [0..6] of single = (0.0899,0.2162,0.4573,0.5461,0.6371,0.7122,0.7975);
-      TBPBALLeftValues: array [0..20] of single = (0.0899,0.2162,0.4573,0.5461,0.6371,0.7122,0.7975,1,1,1,1,1,1,1,1,1,1,1,1,1,1);
-
-
-begin
-
-  //Vincent2019Image.Height := round(Vincent2019Image.width*(289/907));
-
-  If SettingsPageControl.ActivePageIndex = 3 then
-  begin
-    //Vincent2019Image.Height := round(Vincent2019Image.Width * 0.3296);
-    //VincentImagePanel.Width := round(MainForm.Width * 0.78578);
-    //VincentImagePanel.Height := round((MainForm.Width * 0.78578) * 0.3296);
-    Vincent2019Image.Width := VincentImagePanel.Width;
-    Vincent2019Image.Height := VincentImagePanel.Height;
-    For x := 0 to 6 do
-    begin
-      DLImages[x].Width := round(VincentImagePanel.Width *0.117);
-      DLImages[x].Height := DLImages[x].Width;
-      DLImages[x].Top := round(VincentImagePanel.Height *0.2976);
-      DLImages[x].Left := round(VincentImagePanel.Width *DLLeftValues[x]);
-    end;
-  end;
-
-
-  DLImage2.Top := round(Vincent2019Image.Width *0.0978);
-  DLImage3.Top := round(Vincent2019Image.Width *0.0842);
-  DLImage4.Top := round(Vincent2019Image.Width *0.0842);
-  DLImage5.Top := round(Vincent2019Image.Width *0.0842);
-  DLImage6.Top := round(Vincent2019Image.Width *0.0842);
-  DLImage7.Top := round(Vincent2019Image.Width *0.0842);  //0.0012
-
-  If SettingsPageControl.ActivePageIndex = 8 then
-  begin
-    TBPB2020Image.Height := round(TBPB2020Image.Width * 0.3296);
-    For x := 0 to 20 do
-    begin
-      TBPBDLImages[x].Width := round(TBPB2020Image.Width *0.0341);
-      TBPBDLImages[x].Height := TBPBDLImages[x].Width;
-      TBPBDLImages[x].Top := round(TBPB2020Image.Width *0.3426);
-      TBPBDLImages[x].Left := round(TBPB2020Image.Width *TBPBALLeftValues[x]);
-    end;
-  end;
-
-  //DirectoryButton.Left := DirectoryEdit.Left + DirectoryEdit.Width + 3;
-
-end;  }
-
 procedure TMainForm.FSXButtonClick(Sender: TObject);
 begin
   SetGlobalVariables('fsx', 5);
@@ -1692,8 +1652,7 @@ begin
   StarReview := RSProducts[7];
   StarPanel.Visible := true;
 
-//  If not ((Containstext(sim, 'v4')) or (Containstext(sim, 'xp11'))) then
-  If not Containstext(sim, 'v4') then
+  If isLegacySim(sim) then
   begin
     TBPBDynamicLightsToggleSwitch.Visible := false;
     TBPBApronLightsToggleSwitch.Visible := false;
@@ -1705,6 +1664,7 @@ begin
       TBPBLegacyPatchButton.Enabled:= CheckMDLFileFormat(SODEProductArray[1].patchfile, 'PV20MDL');
   end;
 
+  //initialize component states based on corresponding file states and sim
   If sim = 'xp11' then
   begin
 
@@ -1807,9 +1767,6 @@ begin
     end;
 
   end;
-
-  //initialize component states based on corresponding file states and sim
-
 
   stat := sLineBreak+'[TBPB]'+sLineBreak+'TBPBDynamicLightsToggleSwitch='+BoolToString(TBPBDynamicLightsToggleSwitch.IsOn)
           + sLineBreak+ 'TBPBParkingLotToggleSwitch='+BoolToString(TBPBParkingLotToggleSwitch.IsOn)
@@ -2026,9 +1983,6 @@ Var AnImage: TImage;
     x: integer;
 begin
 
-  //to reposition images locations - - No longer used
-  //FormResize(Self);
-
   x := 0;
   //For the total number of Light Images
   For AnImage in ImageArray do
@@ -2056,9 +2010,6 @@ Var AnImage: TImage;
     x,y: integer;
     SL: TStringList;
 begin
-
-  //to reposition images locations  - - No longer used
-  //FormResize(Self);
 
   x := 0;
   //For the total number of Light Images
@@ -2954,7 +2905,7 @@ begin
 
     If GetAppVersionInt('AutogenConfigurationMerger.exe')<14741422076 then
     begin
-      If MessageDlg('In order to override the P3D Autogen System a new (beta) version of ACM is required. Download now?', mtInformation,[mbOk, mbCancel],0) = mrOk then
+      If MessageDlg('In order to override the P3D Autogen System a new version of ACM is required. Download now?', mtInformation,[mbOk, mbCancel],0) = mrOk then
       begin
         URL := 'http://master.dl.sourceforge.net/project/caribsky/AutogenConfigurationMerger.exe';
         downloadedfilename := FileNameFromURL(URL);
@@ -3022,7 +2973,7 @@ begin
   StarReview := RSProducts[4];
   StarPanel.Visible := true;
 
-  If not Containstext(sim, 'v4') then
+  If isLegacySim(sim) then
   begin
     //Remove Very Dense Grass from options. There is hardly any difference, and even more VAS usage in FSX
     VincentGrassComboBox.Items.Delete(4);
@@ -3142,7 +3093,6 @@ begin
           + sLineBreak+ 'HighPolyVegToggleSwitch='+BoolToString(HighPolyVegToggleSwitch.IsOn)
           + sLineBreak+ 'InteriorToggleSwitch='+BoolToString(InteriorToggleSwitch.IsOn);
 
-  //Dynamic Lights
   stat := stat + sLineBreak+ 'DynamicLights=';
   For x := 1 to 7 do
   begin
@@ -3351,7 +3301,7 @@ begin
   TabPanel.Visible := true;
 end;
 
-{procedure TMainForm.MyException(sender: TObject; e: Exception);
+{procedure TMainForm.MyException(sender: TObject; e: Exception);    //exceptions now handled by MadExcept
 var stat: string;
 
 begin
@@ -3639,7 +3589,7 @@ end;
 
 procedure TMainForm.P3Dv5ButtonClick(Sender: TObject);
 begin
-  SetGlobalVariables('p3dv5', 7);   //treat p3dv5 exactly the same as p3dv4
+  SetGlobalVariables('p3dv5', 7);
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
@@ -4068,7 +4018,7 @@ begin
        result := true;
 
        //copy any new files which may have been installed to the installed to the richersims effects, textures and world folders over to the legacy sim location if not using p3dv4
-       If sim <> 'p3dv4' then
+       If isLegacySim(sim) then
         LegacyCopy(simpath);
 
      end
@@ -4088,6 +4038,17 @@ begin
   //purge config folder of patch after succesful install
       DeleteWithUndo(filename);
 
+end;
+
+procedure TMainForm.InstalledSimsTabShow(Sender: TObject);
+begin
+
+//TaskCheckForUpdates in background thread
+    TThread.Synchronize(nil,
+            procedure
+            begin
+              CheckForUpdates;
+            end);
 end;
 
 function TMainForm.FileNameFromURL(URL:String):String;
@@ -4425,7 +4386,7 @@ function TMainForm.SearchForRSCommonEntries(SL: TStringList): TObjectList<TRSCom
 var x:integer;
     prefix: string;
     RSCommonEntry: TRSCommonEntries;
-    XMLCFG: string;
+    XMLCFG,v: string;
 
 begin
   result := TObjectList<TRSCommonEntries>.create;
@@ -4449,9 +4410,10 @@ begin
           else
           begin
             Prefix := '<Path>';
-            filename := GetSpecialFolder(CSIDL_PERSONAL)+'Prepar3D v4 Add-ons\Richer Simulations\Add-on.xml'; //store path of matches in list
+            v := sim[High(sim)];
+            filename := GetSpecialFolder(CSIDL_PERSONAL)+'Prepar3D v'+v+' Add-ons\Richer Simulations\Add-on.xml'; //store path of matches in list
             If not FileExists(Filename) then //account for different documents folder
-              filename := GetSpecialFolder(CSIDL_PROFILE)+'Documents\Prepar3D v4 Add-ons\Richer Simulations\Add-on.xml';
+              filename := GetSpecialFolder(CSIDL_PROFILE)+'Documents\Prepar3D v'+v+' Add-ons\Richer Simulations\Add-on.xml';
             path := ReturnStringBetweenText('<Path>','</Path>',SL.Strings[x]);
           end;
 
@@ -4490,7 +4452,7 @@ begin
   end;
 
 //search add-on.xml
-  If (sim = 'p3dv4') then
+  If not isLegacySim(sim) then
   begin
 
     SL := TStringList.Create;
@@ -4572,12 +4534,6 @@ begin
 
             //delete folder
             DeleteWithUndo(RSCommonEntry.path+'\');
-//            ShOp.Wnd := Self.Handle;
-//            ShOp.wFunc := FO_DELETE;
-//            ShOp.pFrom := PChar();
-//            ShOp.pTo := nil;
-//            ShOp.fFlags := FOF_NOCONFIRMATION or FOF_ALLOWUNDO;
-//            SHFileOperation(ShOp);
           end;
         finally
           SL.Free
@@ -4590,8 +4546,14 @@ end;
 
 procedure TMainForm.GifChange(animate: boolean);
 begin
-  DownloadGif.Animate := animate;
-  DownloadingImage.Visible := animate;
+
+  DownloadGif := DownloadingImage.Picture.Graphic as TGIFImage;
+  If DownloadingImage.Parent.Visible then
+  begin
+    DownloadingImage.Visible := animate;
+    DownloadGif.Animate := animate;
+  end;
+
 end;
 
 procedure TMainForm.CheckForTimeOut;
