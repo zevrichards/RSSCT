@@ -3501,7 +3501,7 @@ begin
           begin
             If newPatch[x]>currentPatch[x] then
             begin
-              With InfoImages[i] do
+              With InfoImages[i] do               //???check to ensure that this executes even when CheckForUpdates runs before the images are visible???
               begin
                 {Picture.LoadFromFile('Images/Update.png');}
                 LoadImageResource(InfoImages[i], HInstance, 'Update');      //show the update notification
