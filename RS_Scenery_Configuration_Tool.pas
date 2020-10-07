@@ -1452,6 +1452,7 @@ begin
         s := supportedsims[InstalledSims[0]];
         SetGlobalVariables(s, InstalledSims[0]);
         SettingsPageControl.ActivePageIndex := 2;
+        TabPanel.Visible := true;
       end
   else begin
         SettingsPageControl.ActivePageIndex := 0;
