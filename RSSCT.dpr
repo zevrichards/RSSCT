@@ -11,9 +11,9 @@ uses
   Vcl.Themes,
   Vcl.Styles,
   RS_Scenery_Configuration_Tool in 'RS_Scenery_Configuration_Tool.pas' {MainForm},
-  rscommonfunctions in '..\rscommonfunctions.pas',
-  Launch in '..\Launch.pas',
-  EmailFeedback in 'EmailFeedback.pas' {EmailForm};
+  EmailFeedback in 'EmailFeedback.pas' {EmailForm},
+  Launch in '..\Common\Launch.pas',
+  rscommonfunctions in '..\Common\rscommonfunctions.pas';
 
 {$R *.res}
 

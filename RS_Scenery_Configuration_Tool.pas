@@ -590,7 +590,7 @@ begin
 
   v := simulator[High(simulator)];
   AddonXML:= GetSpecialFolder(CSIDL_PERSONAL)+'Prepar3D v'+v+' Add-ons\Richer Simulations\Add-on.xml';
-  If not DirectoryExists(GetSpecialFolder(CSIDL_PERSONAL)+'Prepar3D v'+v+' Add-ons\') then //account for different documents folder
+  If not System.SysUtils.DirectoryExists(GetSpecialFolder(CSIDL_PERSONAL)+'Prepar3D v'+v+' Add-ons\') then //account for different documents folder
     AddonXML := GetSpecialFolder(CSIDL_PROFILE)+'Documents\Prepar3D v'+v+' Add-ons\Richer Simulations\Add-on.xml';
 
   sim := simulator;
@@ -774,25 +774,20 @@ end;
 
 
 procedure TMainForm.SODEButtonClick(Sender: TObject);
-//var r: TFPResourceHandle;
+var log: string;
 begin
   If CheckforSODEInstall(sim, LWCFGPath) < 1650 then
   begin
     If MessageDlg('SODE not detected our out of date. Proceed with installation of v1.6.5?', mtInformation, mbYesNO, 0, mbYes) = mrYes then
-      RunProgramWaiting('Installer_SODE_v1.6.5.msi', '', ['']);
+      RunProgramWaiting('Installer_SODE_v1.6.5.msi', '', [''], log);
   end
   else
-  //begin
-    //r := FindResource(HINSTANCE, 'STATUS_DEF', RT_GROUP_ICON);
-    //if r > 0 then
-    //SODEInfoImage.Picture.Graphic := LoadImageResource('PNGImage_1');
     LoadImageResource(SODEInfoImage, HInstance, 'SODEInstalled');
-    {SODEInfoImage.Picture.LoadFromFile('Images/SODEInstalled.png');}
 
 end;
 
 procedure TMainForm.ACMButtonClick(Sender: TObject);
-var hint: string;
+var hint, log: string;
     Rslt: TSearchRec;
     ACMAddonXML, ACMLocation: string;
 begin
@@ -802,7 +797,7 @@ begin
   begin
     DeleteWithUndo(ACMLocation);
     MessageDlg('Autogen Configuration Merger v'+GetAppVersionStr('AutogenConfigurationMerger.exe')+' will now be installed to ensure Autogen works correctly.', mtInformation, [mbOK], 0);
-    If RunProgramWaiting('AutogenConfigurationMerger.exe','', ['"install"', '"'+sim+'"'])<>-1 then
+    If RunProgramWaiting('AutogenConfigurationMerger.exe','', ['"install"', '"'+sim+'"'], log)<>-1 then
     begin
       Sleep(2000);
       If CheckforAgnMrgrInstall(sim, ACMAddonXML, LWCFGPath, ACMLocation) >= GetAppVersionInt('AutogenConfigurationMerger.exe') then
@@ -990,7 +985,6 @@ end;
 procedure TMainForm.CaribSkyShow(Sender: TObject);
 var
     Product: TSODEProduct;
-    SL : TStringList;
 begin
 
   //InstalledProducts:= DetectInstalledProducts(sceneryCFGPath, sim);
@@ -1012,6 +1006,7 @@ begin
     //place Downloading GIF and ProgressBar back in original position
     ProgressBarDownload2.Parent := TabPanel;
     DownloadingImage.Parent := TabPanel;
+    DownloadingImage.center := true;
 
     //reorder items
     ProgressBarDownload2.Top := 0;
@@ -1414,6 +1409,7 @@ begin
 
   //place Downloading GIF and ProgressBar on Sim Selection page temporarily
   DownloadingImage.Parent := InstalledSimsTab;
+  DownloadingImage.center := false;
   ProgressBarDownload2.Parent := InstalledSimsTab;
 
   DeleteFile('RSSCT.bak');
@@ -3991,7 +3987,7 @@ end;
 
 function TMainForm.Install(ToInstall, filename, product: string): boolean;
 var
-    stat: string;
+    stat, log: string;
     ReturnCode: integer;
 begin
   //Install update/run patch
@@ -4008,7 +4004,7 @@ begin
   begin
      Memo1.Lines.Add('Running file...');
      //THIS NEED TO BE WAITING! In order to run LegacyCopy afterwards!
-     ReturnCode := RunProgramWaiting(filename,'', ['']);
+     ReturnCode := RunProgramWaiting(filename,'', [''], log);
      If ReturnCode = 0 then
      begin
        Memo1.Lines.Add(filename+' run.');
@@ -4387,7 +4383,7 @@ function TMainForm.SearchForRSCommonEntries(SL: TStringList): TObjectList<TRSCom
 var x:integer;
     prefix: string;
     RSCommonEntry: TRSCommonEntries;
-    XMLCFG,v: string;
+    v: string;
 
 begin
   result := TObjectList<TRSCommonEntries>.create;
@@ -4433,7 +4429,6 @@ var SL: TStringList;
     RSCommonEntry: TRSCommonEntries;
     RSCommonList: TObjectList<TRSCommonEntries>;
     conflict: boolean;
-    ShOp: TSHFileOpStruct;
 begin
 
   conflict := false;

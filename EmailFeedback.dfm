@@ -3,7 +3,7 @@ object EmailForm: TEmailForm
   Top = 0
   BorderIcons = [biSystemMenu]
   Caption = 'Provide Feedback'
-  ClientHeight = 170
+  ClientHeight = 169
   ClientWidth = 283
   Color = clBtnFace
   Constraints.MaxHeight = 208
