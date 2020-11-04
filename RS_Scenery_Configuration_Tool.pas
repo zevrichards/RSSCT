@@ -523,63 +523,19 @@ end;
 //similar code @ http://edn.embarcadero.com/de/article/23057
 procedure TMainForm.BeforeDestruction;
 var i: integer;
-    SL: TStringList;
-    aSwitch : TToggleSwitch;
-    aCheckbox: TCheckbox;
-    aComboBox: TComboBox;
-    aButton: TButton;
-    aEdit: TEdit;
-    aTrackbar: TTrackbar;
-    PersistentSwitches: TArray<TToggleSwitch>;
-    PersistentCheckBoxes: TArray<TCheckbox>;
-    PersistentComboBoxes: TArray<TComboBox>;
-    PersistentButtons: TArray<TButton>;
-    PersistentEdits: TArray<TEdit>;
-    PersistentTrackbars: TArray<TTrackBar>;
-    //Product: TSODEProduct;
+    Comps: Array of TComponent;
+
 begin
   inherited;
 
-  for i:=0 to ComponentCount-1 do
+  SetLength(Comps, ComponentCount);
+  For i := 0 to ComponentCount-1 do
   begin
-    if (Components[i] is TToggleSwitch) then
-      TAppender<TToggleSwitch>.Append(PersistentSwitches, Components[i] as TToggleSwitch);
-    if (Components[i] is TCheckbox) then
-      TAppender<TCheckbox>.Append(PersistentCheckBoxes, Components[i] as TCheckbox);
-    if (Components[i] is TComboBox) then
-      TAppender<TComboBox>.Append(PersistentComboBoxes, Components[i] as TComboBox);
-    if (Components[i] is TButton) then
-      TAppender<TButton>.Append(PersistentButtons, Components[i] as TButton);
-    if (Components[i] is TEdit) then
-      TAppender<TEdit>.Append(PersistentEdits, Components[i] as TEdit);
-    if (Components[i] is TTrackBar) then
-      TAppender<TTrackBar>.Append(PersistentTrackbars, Components[i] as TTrackBar);
+    Comps[i]:= Components[i];
   end;
 
-  SL := TStringList.Create;
-  try
-    SL.Text := '';
-    For aSwitch in PersistentSwitches do
-      SL.Text :=  SL.Text + aSwitch.name+'='+ BoolToStr(aSwitch.IsOn) + sLineBreak;
-    For aCheckBox in PersistentCheckBoxes do
-      SL.Text :=  SL.Text + aCheckBox.name+'='+ BoolToStr(aCheckBox.Checked) + sLineBreak;
-    For aComboBox in PersistentComboBoxes do
-      SL.Text :=  SL.Text + aComboBox.name+'='+ IntToStr(aComboBox.itemindex) + sLineBreak;
-    For aButton in PersistentButtons do
-      SL.Text :=  SL.Text + aButton.name+'='+ BoolToStr(aButton.enabled) + sLineBreak;
-    For aEdit in PersistentEdits do
-      SL.Text :=  SL.Text + aEdit.name+'='+ aEdit.text + sLineBreak;
-    For aTrackbar in PersistentTrackbars do
-      SL.Text :=  SL.Text + aTrackbar.name+'='+ IntToStr(aTrackbar.position) + sLineBreak;
+  SaveState(Comps, ComponentCount, ExtractFilePath(Application.ExeName)+'RSSCT.fs')
 
-    SL.SaveToFile('RSSCT.fs');
-  finally
-    SL.Free;
-  end;
-
-  //Free up Array of TSODEProduct objects we created in SetGlobalVariables
-  {For i := 1 to length(SODEProductArray) do
-    SODEProductArray[i].Free; } //no longer necessary, already seems to be NIL
 end;
 
 procedure TMainForm.SetGlobalVariables(simulator: string; simindex: integer);
@@ -775,14 +731,26 @@ end;
 
 procedure TMainForm.SODEButtonClick(Sender: TObject);
 var log: string;
+    lSearchRec:TSearchRec;
+    lPath:string;
+
 begin
-  If CheckforSODEInstall(sim, LWCFGPath) < 1650 then
+  lPath := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName));
+
+  if FindFirst(lPath+'Installer_SODE*.msi',faAnyFile,lSearchRec) = 0 then
   begin
-    If MessageDlg('SODE not detected our out of date. Proceed with installation of v1.6.5?', mtInformation, mbYesNO, 0, mbYes) = mrYes then
-      RunProgramWaiting('Installer_SODE_v1.6.5.msi', '', [''], log);
-  end
-  else
-    LoadImageResource(SODEInfoImage, HInstance, 'SODEInstalled');
+    try
+      If CheckforSODEInstall(sim, LWCFGPath) < 1650 then
+      begin
+        If MessageDlg('SODE not detected our out of date. Proceed with installation of '+lSearchRec.Name+'?', mtInformation, mbYesNO, 0, mbYes) = mrYes then
+          RunProgramWaiting(lSearchRec.Name, '', [''], log);
+      end
+      else
+        LoadImageResource(SODEInfoImage, HInstance, 'SODEInstalled');
+    finally
+      FindClose(lSearchRec);  // Free resources on successful find
+    end;
+  end;
 
 end;
 
@@ -986,6 +954,8 @@ procedure TMainForm.CaribSkyShow(Sender: TObject);
 var
     Product: TSODEProduct;
 begin
+
+  TabPanel.Visible:= true;
 
   //InstalledProducts:= DetectInstalledProducts(sceneryCFGPath, sim);
 
@@ -1388,20 +1358,8 @@ procedure TMainForm.FormCreate(Sender: TObject);
 var i: integer;
     s: string;
     installedsims : TArray<integer>;
-    SL: TStringList;
-    BckEvent: TNotifyEvent;
-    aSwitch : TToggleSwitch;
-    aCheckbox: TCheckbox;
-    aComboBox: TComboBox;
-    aButton: TButton;
-    aEdit: TEdit;
-    aTrackbar: TTrackbar;
-    PersistentSwitches: TArray<TToggleSwitch>;
-    PersistentCheckBoxes: TArray<TCheckbox>;
-    PersistentComboBoxes: TArray<TComboBox>;
-    PersistentButtons: TArray<TButton>;
-    PersistentEdits: TArray<TEdit>;
-    PersistentTrackbars: Tarray<TTrackbar>;
+    Comps: Array of TComponent;
+
 
 begin
   //EnableMenuItem( GetSystemMenu( handle, False ),SC_CLOSE, MF_BYCOMMAND or MF_GRAYED );
@@ -1487,93 +1445,13 @@ begin
   //initialize switches, buttons, etc... from .fs file if it exists
   If FileExists('RSSCT.fs') then
   begin
-
-    for i:=0 to ComponentCount-1 do
+    SetLength(Comps, ComponentCount);
+    For i := 0 to ComponentCount-1 do
     begin
-      if (Components[i] is TToggleSwitch) then
-        TAppender<TToggleSwitch>.Append(PersistentSwitches, Components[i] as TToggleSwitch);
-      if (Components[i] is TCheckbox) then
-        TAppender<TCheckbox>.Append(PersistentCheckBoxes, Components[i] as TCheckbox);
-      if (Components[i] is TComboBox) then
-        TAppender<TComboBox>.Append(PersistentComboBoxes, Components[i] as TComboBox);
-      if (Components[i] is TButton) then
-        TAppender<TButton>.Append(PersistentButtons, Components[i] as TButton);
-      if (Components[i] is TEdit) then
-        TAppender<TEdit>.Append(PersistentEdits, Components[i] as TEdit);
-      if (Components[i] is TTrackbar) then
-        TAppender<TTrackbar>.Append(PersistentTrackbars, Components[i] as TTrackbar);
-
+      Comps[i]:= Components[i];
     end;
 
-    SL := TStringList.Create;
-    try
-      SL.LoadFromFile('RSSCT.fs');
-
-      For aSwitch in PersistentSwitches do
-      begin
-        BckEvent :=  aSwitch.OnClick;
-        aSwitch.OnClick := nil;
-
-        If SL.text[Pos(aSwitch.Name+'=',SL.Text)+length(aSwitch.Name+'=')] = '0' then
-          aSwitch.State := tssOff
-        else
-          aSwitch.State := tssOn;
-
-        aSwitch.OnClick := BckEvent;
-      end;
-
-      For aCheckbox in PersistentCheckboxes do
-      begin
-        BckEvent :=  aCheckbox.OnClick;
-        aCheckbox.OnClick := nil;
-
-        If SL.text[Pos(aCheckbox.Name+'=',SL.Text)+length(aCheckbox.Name+'=')] = '0' then
-          aCheckbox.checked := false
-        else
-          aCheckbox.checked := true;
-
-        aCheckbox.OnClick := BckEvent;
-      end;
-
-      For aComboBox in PersistentComboBoxes do
-      begin
-        BckEvent :=  aComboBox.Onchange;
-        aComboBox.Onchange := nil;
-
-        aComboBox.ItemIndex := StrToIntDef(SL.text[Pos(aComboBox.Name+'=',SL.Text)+length(aComboBox.Name+'=')], 0);
-
-        aComboBox.OnChange := BckEvent;
-      end;
-
-      For aButton in PersistentButtons do
-      begin
-        BckEvent :=  aButton.OnClick;
-        aButton.OnClick := nil;
-
-        If SL.text[Pos(aButton.Name+'=',SL.Text)+length(aButton.Name+'=')] = '0' then
-          aButton.enabled := false
-        else
-          aButton.enabled := true;
-
-        aButton.OnClick := BckEvent;
-      end;
-
-      For aEdit in PersistentEdits do
-        aEdit.text := ReturnStringBetween(aEdit.Name+'=', sLineBreak, 'RSSCT.fs');
-
-      For aTrackbar in PersistentTrackbars do
-      begin
-        BckEvent :=  aTrackbar.OnChange;
-        aTrackbar.OnChange := nil;
-
-        aTrackbar.position := StrToIntDef(ReturnStringBetween(aTrackbar.Name+'=', sLineBreak, 'RSSCT.fs'), 0);
-
-        aTrackbar.OnChange := BckEvent;
-      end;
-    finally
-      SL.Free;
-    end;
-
+    LoadState(Comps, ComponentCount, ExtractFilePath(Application.ExeName)+'RSSCT.fs')
   end;
 
   aProgressForm := TForm.Create(MainForm);
