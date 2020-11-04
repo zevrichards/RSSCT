@@ -956,6 +956,7 @@ var
 begin
 
   TabPanel.Visible:= true;
+  TabPanel.Show;
 
   //InstalledProducts:= DetectInstalledProducts(sceneryCFGPath, sim);
 
@@ -1000,12 +1001,12 @@ begin
 
     EnableProductImages(InstalledProducts);
 
-//    //TaskCheckForUpdates in background thread
-//    TThread.Synchronize(nil,
-//            procedure
-//            begin
-//              CheckForUpdates;
-//            end);
+    //TaskCheckForUpdates in background thread
+    TThread.Queue(nil,
+            procedure
+            begin
+              CheckForUpdates;
+            end);
 
   end;
 
@@ -1407,6 +1408,7 @@ begin
         SetGlobalVariables(s, InstalledSims[0]);
         SettingsPageControl.ActivePageIndex := 2;
         TabPanel.Visible := true;
+        TabPanel.Show;
       end
   else begin
         SettingsPageControl.ActivePageIndex := 0;
@@ -1425,7 +1427,7 @@ begin
           End;
         end;
 
-        TabPanel.Visible := false;
+//        TabPanel.Visible := false;
         SettingsPageControl.width := MainForm.Width;
         SimsFlowPanel.left := SettingsPageControl.Left + ((SettingsPageControl.Width - SimsFlowPanel.Width) div 2);
         SimsFlowPanel.top := SettingsPageControl.Left + ((SettingsPageControl.Height - SimsFlowPanel.Height) div 2);
@@ -1475,6 +1477,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 procedure TMainForm.FSXSEButtonClick(Sender: TObject);
@@ -1483,6 +1486,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 procedure TMainForm.TBPB2020InfoImageClick(Sender: TObject);
@@ -3174,6 +3178,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 {procedure TMainForm.MyException(sender: TObject; e: Exception);    //exceptions now handled by MadExcept
@@ -3436,6 +3441,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 procedure TMainForm.P3Dv2ButtonClick(Sender: TObject);
@@ -3444,6 +3450,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 procedure TMainForm.P3Dv3ButtonClick(Sender: TObject);
@@ -3452,6 +3459,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 procedure TMainForm.P3Dv4ButtonClick(Sender: TObject);
@@ -3460,6 +3468,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 procedure TMainForm.P3Dv5ButtonClick(Sender: TObject);
@@ -3468,6 +3477,7 @@ begin
   SettingsPageControl.ActivePageIndex := 2;
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
+  TabPanel.Show;
 end;
 
 procedure TMainForm.PurgeRegButtonClick(Sender: TObject);
