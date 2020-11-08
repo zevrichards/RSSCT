@@ -771,27 +771,23 @@ begin
       If CheckforAgnMrgrInstall(sim, ACMAddonXML, LWCFGPath, ACMLocation) >= GetAppVersionInt('AutogenConfigurationMerger.exe') then
       begin
         MessageDlg('Success!', mtInformation, [mbOK], 0);
-        {ACMInfoImage.Picture.LoadFromFile('Images/AgnMrgrInstalled.png')}
         LoadImageResource(ACMInfoImage, HInstance, 'AgnMrgrInstalled');
         ACMInfoImage.Hint := 'v'+GetAppVersionStr(ACMLocation);
       end
       else
       begin
         MessageDlg('Autogen Configuration Merger could not be installed. Autogen will not work correctly!', mtWarning, [mbOK], 0);
-        {ACMInfoImage.Picture.LoadFromFile('Images/AgnMrgrNotInstalled.png')}
         LoadImageResource(ACMInfoImage, HInstance, 'AgnMrgrNotInstalled');
       end;
     end
     else
     begin
      MessageDlg('Autogen Configuration Merger could not be installed. Autogen will not work correctly!', mtWarning, [mbOK], 0);
-     {ACMInfoImage.Picture.LoadFromFile('Images/AgnMrgrNotInstalled.png')}
      LoadImageResource(ACMInfoImage, HInstance, 'AgnMrgrNotInstalled');
     end;
   end
   else
   begin
-    {ACMInfoImage.Picture.LoadFromFile('Images/AgnMrgrInstalled.png');}
     LoadImageResource(ACMInfoImage, HInstance, 'AgnMrgrInstalled');
     ACMInfoImage.Hint := 'v'+GetAppVersionStr(ACMLocation);
   end;
@@ -799,7 +795,6 @@ begin
   hint := CheckforAGNError;
   If hint<>'' then
   begin
-    {ACMInfoImage.Picture.LoadFromFile('Images/AgnMrgrError.png');}
     LoadImageResource(ACMInfoImage, HInstance, 'AgnMrgrError');
     ACMInfoImage.hint := hint;
   end;
@@ -3218,26 +3213,27 @@ begin
   end;
 
 //there seems to be an Access violation here. I am assuming that AContentLength is to big for aProgressBar.Max?
-  If AContentLength > MaxInt then
-  begin
-    ProgressBarDownload.Max := MaxInt;
-    ProgressBarDownload2.Max := MaxInt;
-  end
-  else
-  begin
-    If AContentLength > 0 then
-    begin
-     ProgressBarDownload.Max := AContentLength;
-     ProgressBarDownload2.Max := AContentLength;
-    end;
-  end;
+//  If AContentLength > MaxInt then
+//  begin
+//    ProgressBarDownload.Max := MaxInt;
+//    ProgressBarDownload2.Max := MaxInt;
+//  end
+//  else
+//  begin
+//    If AContentLength > 0 then
+//    begin
+//     ProgressBarDownload.Max := AContentLength;
+//     ProgressBarDownload2.Max := AContentLength;
+//    end;
+//  end;
+  ProgressBarDownload.Max := 100;
 
   TThread.Queue(nil,
     procedure
     begin
 
-      ProgressBarDownload.position := AReadCount;
-      ProgressBarDownload2.position := AReadCount;
+      ProgressBarDownload.position := AReadCount div AContentLength * 100;
+      ProgressBarDownload2.position := AReadCount div AContentLength * 100;
       LabelGlobalSpeed.caption := 'Downloading: '+downloadedfilename+Format('. %n MB of %n MB', [LRead, LSize])+ Format(' @ %d KB/s.', [LSpeed]) + Format(' %.0d:', [mins])+ Format('%.2d left', [secs]);
       //Memo1.Lines.Add('Receiving Data...');
       ReceivingData := true;
@@ -4320,16 +4316,15 @@ var SL: TStringList;
 begin
 
   conflict := false;
-
-//search scenery.cfg
   RSCommonList := TObjectList<TRSCommonEntries>.create;
 
+//search scenery.cfg
   SL := TStringList.Create;
   try
     If FileExists(sceneryCFGPath+'scenery.cfg') then
     begin
       SL.LoadFromFile (sceneryCFGPath+'scenery.cfg');
-      RSCommonList := SearchForRSCommonEntries(SL);
+      RSCommonList.addRange(SearchForRSCommonEntries(SL));
     end;
   finally
     SL.Free;
@@ -4353,7 +4348,8 @@ begin
   end;
 
 //compare matches
-  If RSCommonList.Count > 1 then begin
+  If RSCommonList.Count > 1 then
+  begin
     For x := 1 to RSCommonList.Count-1 do
     begin
       If RSCommonList[0].path <> RSCommonList[x].path then
@@ -4400,18 +4396,18 @@ begin
               For x:= 1 to 6 do
                 SL.Delete(RSCommonEntry.pos-2);   //6 lines to delete in scenery.cfg starting 2 lines above the RSCommonentry.path
             end
-            else
+            else   //addon.xml
             begin
               y := RSCommonEntry.pos;
               z := RSCommonEntry.pos;
-
+              //???
               While not (SL.Strings[y].Contains('<AddOn.Name>') or (y<1)) do   //search backward to begninning of <addOn>
                 dec(y);
-
-              While not (SL.Strings[z].Contains('<AddOn.Name>') or (z>SL.Count)) do   //search forward to end of <addOn>
+              //???
+              While not (SL.Strings[z].Contains('</AddOn.Component>')) or (z>=SL.Count-1) do   //search forward to end of <addOn>
                 inc(z);
 
-              For x:= z-1 downto y do
+              For x:= z downto y do
                 SL.Delete(x);  //delete from starting index, remember indexes change as we delete
             end;
             SL.SaveToFile(RSCommonEntry.filename);
