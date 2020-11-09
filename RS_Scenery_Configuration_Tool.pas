@@ -3202,7 +3202,8 @@ begin
 //  CancelDownloadButton.Enabled := true;
 
   LTime := TThread.GetTickCount - FGlobalStart;
-  LSpeed := (AReadCount) div LTime;
+  If LTime > 0 then
+    LSpeed := (AReadCount) div LTime;
   LSize :=  AContentLength / (1024*1024);
   LRead :=  AReadCount / (1024*1024);
   If Lspeed > 0 then
@@ -3232,8 +3233,11 @@ begin
     procedure
     begin
 
-      ProgressBarDownload.position := AReadCount div AContentLength * 100;
-      ProgressBarDownload2.position := AReadCount div AContentLength * 100;
+      If AContentLength > 0 then
+      begin
+        ProgressBarDownload.position := AReadCount div AContentLength * 100;
+        ProgressBarDownload2.position := AReadCount div AContentLength * 100;
+      end;
       LabelGlobalSpeed.caption := 'Downloading: '+downloadedfilename+Format('. %n MB of %n MB', [LRead, LSize])+ Format(' @ %d KB/s.', [LSpeed]) + Format(' %.0d:', [mins])+ Format('%.2d left', [secs]);
       //Memo1.Lines.Add('Receiving Data...');
       ReceivingData := true;
