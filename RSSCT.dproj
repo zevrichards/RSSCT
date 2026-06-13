@@ -66,8 +66,9 @@
         <DCC_UsePackage>rtl;fmxase;vcl;CustomIPTransport;vclactnband;vcldsnap;IndyCore;IndySystem;vclx;bindcomp;tethering;svnui;appanalytics;dsnap;bindcompvcl;vclimg;vcltouch;VclSmp;vcldb;bindcompfmx;svn;vclie;bindengine;dbrtl;IndyProtocols;fmx;fmxdae;xmlrtl;fmxobj;vclwinx;inet;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
-        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=2.0.3.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
-        <VerInfo_Build>0</VerInfo_Build>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=2.0.4.5;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_Release>4</VerInfo_Release>
+        <VerInfo_Build>5</VerInfo_Build>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
@@ -84,8 +85,10 @@
         <AppEnableRuntimeThemes>true</AppEnableRuntimeThemes>
         <DCC_RemoteDebug>false</DCC_RemoteDebug>
         <AppExecutionLevel>requireAdministrator</AppExecutionLevel>
-        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=2.0.3.1;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=2.0.4.5;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <AppDPIAwarenessMode>PerMonitor</AppDPIAwarenessMode>
+        <VerInfo_Release>4</VerInfo_Release>
+        <VerInfo_Build>5</VerInfo_Build>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
@@ -100,11 +103,11 @@
         <DCC_DebugInformation>2</DCC_DebugInformation>
         <DCC_MapFile>3</DCC_MapFile>
         <Icon_MainIcon>Images\RS.ico</Icon_MainIcon>
-        <VerInfo_Keys>CompanyName=Richer Simulations;FileDescription=Scenery Configuration tool for RS Products;FileVersion=2.0.3.1;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=Richer Simulations;FileDescription=Scenery Configuration tool for RS Products;FileVersion=2.0.4.5;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <AppDPIAwarenessMode>PerMonitor</AppDPIAwarenessMode>
         <AppExecutionLevel>requireAdministrator</AppExecutionLevel>
-        <VerInfo_Build>1</VerInfo_Build>
         <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_Release>4</VerInfo_Release>
         <CfgDependentOn>Release.optset</CfgDependentOn>
     </PropertyGroup>
     <ItemGroup>
@@ -239,10 +242,6 @@
             <ResourceType>RCDATA</ResourceType>
             <ResourceId>TBPB_parkinglot</ResourceId>
         </RcItem>
-        <RcItem Include="Images\TBPB2020.png">
-            <ResourceType>RCDATA</ResourceType>
-            <ResourceId>TBPB2020</ResourceId>
-        </RcItem>
         <RcItem Include="Images\TVSV_hr.png">
             <ResourceType>RCDATA</ResourceType>
             <ResourceId>TVSV_hr</ResourceId>
@@ -266,6 +265,54 @@
         <RcItem Include="Images\Coming_Soon.png">
             <ResourceType>RCDATA</ResourceType>
             <ResourceId>Coming_Soon</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\Dominica.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>Dominica</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\Dominica_disabled.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>Dominica_disabled</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\TBPB2020_disabled.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>TBPB2020_disabled</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\TBPB2020.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>TBPB2020</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\Dominica HR.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>Dominica_HR</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\TDPDSlope.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>TDPDSlope</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\RWY26MWCL.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>RWY26MWCL</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\RWY26MWCL_disabled.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>RWY26MWCL_disabled</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\RWY26MWCL_hr.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>RWY26MWCL_hr</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\SLDSOGS.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>SLDSOGS</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\SLDSOGS_disabled.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>SLDSOGS_disabled</ResourceId>
+        </RcItem>
+        <RcItem Include="Images\SLDSOGS_hr.png">
+            <ResourceType>RCDATA</ResourceType>
+            <ResourceId>SLDSOGS_hr</ResourceId>
         </RcItem>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>

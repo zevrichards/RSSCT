@@ -1,3 +1,28 @@
+// =============================================================================
+// RS Scenery Configuration Tool (RSSCT)
+// Richer Simulations — https://richersimulations.com
+//
+// A Windows desktop installer and configuration utility for Richer Simulations
+// scenery packages. Shipped to end users as part of product releases.
+//
+// Architecture overview:
+//   - Single VCL form (TMainForm) with a tab-per-product layout.
+//   - On startup, the user selects their simulator (FSX, P3D v2-v6, XP11/12).
+//   - SetGlobalVariables() resolves all install paths and product detections
+//     for the selected simulator, then each product tab's OnShow event reads
+//     the actual file/XML states and initialises its toggle switches.
+//   - Toggle switches and buttons write directly to scenery files, SODE XML,
+//     and the Windows registry. There is no intermediate settings file.
+//   - Auto-update: CheckForUpdates() fetches a version INI from SourceForge
+//     and compares against the embedded version resource; downloads are handled
+//     by TNetHTTPRequest on a background TTask.
+//
+// Key dependencies:
+//   - RSCommonFunctions (shared utility library — sibling repo)
+//   - SODE (Scenery Object Display Engine) — end-user runtime
+//   - 12bPilot SODE XML format for animated object configuration
+// =============================================================================
+
 unit RS_Scenery_Configuration_Tool;
 
 interface
@@ -9,7 +34,7 @@ uses
   Vcl.ComCtrls, Vcl.WinXCtrls, Vcl.StdCtrls, RSCommonFunctions, Launch, StrUtils, shlobj, ShellAPI, System.UITypes,
   System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, System.Threading,
   System.RegularExpressions, System.Generics.Collections, Generics.Defaults, System.IOUtils, FileCtrl, DateUtils,
-  Vcl.Imaging.GIFImg, EmailFeedback;
+  Vcl.Imaging.GIFImg, EmailFeedback, Vcl.Menus;
 
 type
   TTrackBar = class(Vcl.ComCtrls.TTrackBar)
@@ -29,6 +54,11 @@ type
   TSwitchState = (ssOn, ssOff);
   {TMessageBtns = class(}
 
+  // Groups all SODE-related paths and UI references for a single RS product.
+  // One TSODEProduct instance is created per product on simulator selection
+  // and stored in SODEProductArray. Used by SODEFileCheck, LegacyPatchButtonsEnable,
+  // DynamicLightSwitch and related procedures to avoid repeating per-product
+  // path logic throughout the form.
   TSODEProduct = class
     Index: integer; //corresponds to the product index in RSProducts
     LegacyPatchButton: TButton;
@@ -48,11 +78,6 @@ type
     Vincent2019: TTabSheet;
     Antigua2018: TTabSheet;
     Anitgua2018: TImage;
-    CaribSkyFlowPanel: TFlowPanel;
-    Vincent2019ClickImage: TImage;
-    Antigua2018ClickImage: TImage;
-    Barbados2017ClickImage: TImage;
-    Kitts2017ClickImage: TImage;
     CommonFlowPanel: TFlowPanel;
     ACMPanel: TPanel;
     ACMImage: TImage;
@@ -69,7 +94,6 @@ type
     TrafficImage: TImage;
     TrafficLabel: TLabel;
     TrafficSpeedToggleSwitch: TToggleSwitch;
-    GrenadaClickImage: TImage;
     Vincent2019SettingsPanel: TPanel;
     VincentParkingLotToggleSwitch: TToggleSwitch;
     InteriorToggleSwitch: TToggleSwitch;
@@ -112,28 +136,12 @@ type
     Updater: TTabSheet;
     NetHTTPClient: TNetHTTPClient;
     NetHTTPRequest: TNetHTTPRequest;
-    Dominica2020Panel: TPanel;
-    Dominica2019ClickImage: TImage;
-    StVincent2019Panel: TPanel;
-    StKitts2017Panel: TPanel;
-    Antigua2018Panel: TPanel;
-    Barbados2017Panel: TPanel;
-    Grenada2020Panel: TPanel;
-    Dominica2019InfoImage: TImage;
-    Antigua2018InfoImage: TImage;
-    Barbados2017InfoImage: TImage;
-    GrenadaInfoImage: TImage;
-    Kitts2017InfoImage: TImage;
-    Vincent2019InfoImage: TImage;
     ProgressBarDownload: TProgressBar;
     LabelGlobalSpeed: TLabel;
     Memo1: TMemo;
     VersionPanel: TPanel;
     ToolNameLabel: TLabel;
     CopyRightLabel: TLabel;
-    CommonPanel: TPanel;
-    CommonClickImage: TImage;
-    CommonInfoImage: TImage;
     TVSVDragStripToggleSwitch: TToggleSwitch;
     BuildingsPerCell: TLabel;
     FacebookImage: TImage;
@@ -145,9 +153,6 @@ type
     DirectoryButton: TButton;
     SceneryXMLCFGPanel: TPanel;
     SVDLegacyPatchButton: TButton;
-    TBPB2020Panel: TPanel;
-    TBPB2020ClickImage: TImage;
-    TBPB2020InfoImage: TImage;
     TBPB2020: TTabSheet;
     TBPBSettingsPanel: TPanel;
     TBPBParkingLotToggleSwitch: TToggleSwitch;
@@ -198,28 +203,12 @@ type
     StarPanel: TPanel;
     RegistyLoggingPanel: TPanel;
     VerboseLoggingCheckBox: TCheckBox;
-    TBPB2020VersionLabel1: TLabel;
-    Vincent2019VersionLabel1: TLabel;
-    Barbados2017VersionLabel1: TLabel;
-    Antigua2018VersionLabel1: TLabel;
-    Kitts2017VersionLabel1: TLabel;
-    Dominica2019VersionLabel1: TLabel;
-    CommonVersionLabel1: TLabel;
-    GrenadaVersionLabel1: TLabel;
     Vincent2019VersionLabel2: TLabel;
     Antigua2018VersionLabel2: TLabel;
     Barbados2017VersionLabel2: TLabel;
     Kitts2017VersionLabel2: TLabel;
     TBPB2020VersionLabel2: TLabel;
     PurgeRegButton: TButton;
-    TBPB2020UpdateVersionLabel1: TLabel;
-    Vincent2019UpdateVersionLabel1: TLabel;
-    Kitts2017UpdateVersionLabel1: TLabel;
-    GrenadaUpdateVersionLabel1: TLabel;
-    Dominica2019UpdateVersionLabel1: TLabel;
-    CommonUpdateVersionLabel1: TLabel;
-    Barbados2017UpdateVersionLabel1: TLabel;
-    Antigua2018UpdateVersionLabel1: TLabel;
     CheckForUpdatesButton: TButton;
     UseP3DAutogenSystemBtn: TCheckBox;
     XP11Button: TButton;
@@ -227,6 +216,84 @@ type
     Label1: TLabel;
     Label2: TLabel;
     P3Dv5Button: TButton;
+    Vincent2019W2XPButton: TButton;
+    MainMenu1: TMainMenu;
+    Home1: TMenuItem;
+    CaribSkyProducts1: TMenuItem;
+    DownloadManager1: TMenuItem;
+    CommonSettings1: TMenuItem;
+    InstagramImage: TImage;
+    Close1: TMenuItem;
+    TDPD2023: TTabSheet;
+    TDPD2023Image: TImage;
+    TDPDSlopeToggleSwitch: TToggleSwitch;
+    TDPD2023W2XPButton: TButton;
+    P3Dv6Button: TButton;
+    XP12Button: TButton;
+    Dominica2023VersionLabel2: TLabel;
+    DynamicLightingBrightnessPanel: TPanel;
+    DynamicLightsBrightnessToggleSwitch: TToggleSwitch;
+    DynamicLightsBrightnessLabel: TLabel;
+    DownloadingLabel: TLabel;
+    PageScroller1: TPageScroller;
+    CaribSkyFlowPanel: TFlowPanel;
+    TBPB2020Panel: TPanel;
+    TBPB2020ClickImage: TImage;
+    TBPB2020InfoImage: TImage;
+    TBPB2020VersionLabel1: TLabel;
+    TBPB2020UpdateVersionLabel1: TLabel;
+    StVincent2019Panel: TPanel;
+    Vincent2019ClickImage: TImage;
+    Vincent2019InfoImage: TImage;
+    Vincent2019VersionLabel1: TLabel;
+    Vincent2019UpdateVersionLabel1: TLabel;
+    Antigua2018Panel: TPanel;
+    Antigua2018ClickImage: TImage;
+    Antigua2018InfoImage: TImage;
+    Antigua2018VersionLabel1: TLabel;
+    Antigua2018UpdateVersionLabel1: TLabel;
+    Barbados2017Panel: TPanel;
+    Barbados2017ClickImage: TImage;
+    Barbados2017InfoImage: TImage;
+    Barbados2017VersionLabel1: TLabel;
+    Barbados2017UpdateVersionLabel1: TLabel;
+    StKitts2017Panel: TPanel;
+    Kitts2017ClickImage: TImage;
+    Kitts2017InfoImage: TImage;
+    Kitts2017VersionLabel1: TLabel;
+    Kitts2017UpdateVersionLabel1: TLabel;
+    Dominica2023Panel: TPanel;
+    Dominica2023ClickImage: TImage;
+    Dominica2023InfoImage: TImage;
+    Dominica2023VersionLabel1: TLabel;
+    Dominica2023UpdateVersionLabel1: TLabel;
+    Grenada2020Panel: TPanel;
+    GrenadaClickImage: TImage;
+    GrenadaInfoImage: TImage;
+    GrenadaVersionLabel1: TLabel;
+    GrenadaUpdateVersionLabel1: TLabel;
+    CommonPanel: TPanel;
+    CommonClickImage: TImage;
+    CommonInfoImage: TImage;
+    CommonVersionLabel1: TLabel;
+    CommonUpdateVersionLabel1: TLabel;
+    RWY26MWCLPanel: TPanel;
+    RWY26MWCLClickImage: TImage;
+    RWY26MWCLInfoImage: TImage;
+    RWY26MWCLVersionLabel1: TLabel;
+    RWY26MWCLUpdateVersionLabel1: TLabel;
+    RWY26MWCLTabSheet: TTabSheet;
+    RWY26MWCLImage: TImage;
+    CaymanIslandsw2XPButton: TButton;
+    SLDSOGSTabSheet: TTabSheet;
+    SLDSOGSImage: TImage;
+    SLDSOGSW2XPButton: TButton;
+    SLDSOGSPanel: TPanel;
+    SLDSOGSClickImage: TImage;
+    SLDSOGSInfoImage: TImage;
+    SLDSOGSVersionLabel1: TLabel;
+    SLDSOGSUpdateVersionLabel1: TLabel;
+    SLDP3Dv5ToggleSwitch: TToggleSwitch;
     //constructor Create(AOwner: TComponent); override;
     procedure BeforeDestruction; override;
 
@@ -239,7 +306,6 @@ type
     procedure StreetLightToggleSwitchClick(Sender: TObject);
     procedure TAPACompatibilityToggleSwitchClick(Sender: TObject);
     procedure VincentApronShadowsToggleSwitchClick(Sender: TObject);
-    procedure VincentParkingLotToggleSwitchClick(Sender: TObject);
     procedure InteriorToggleSwitchClick(Sender: TObject);
     procedure VincentDynamicLightsToggleSwitchMouseEnter(Sender: TObject);
     {procedure MyException(sender: TObject; e: Exception);}
@@ -276,14 +342,14 @@ type
     procedure Barbados2018Show(Sender: TObject);
     procedure TKPKCompatibilityToggleSwitchClick(Sender: TObject);
     procedure Kitts2017ClickImageClick(Sender: TObject);
-    procedure Dominica2019InfoImageClick(Sender: TObject);
+    procedure Dominica2023InfoImageClick(Sender: TObject);
     procedure Vincent2019InfoImageClick(Sender: TObject);
     procedure Antigua2018InfoImageClick(Sender: TObject);
     procedure Barbados2017InfoImageClick(Sender: TObject);
     procedure Kitts2017InfoImageClick(Sender: TObject);
     procedure GrenadaInfoImageClick(Sender: TObject);
     procedure CheckForUpdates;
-    procedure TryMirror;
+//    procedure TryMirror;
     procedure NetHTTPRequestRequestCompleted(const Sender: TObject;
       const AResponse: IHTTPResponse);
     procedure NetHTTPRequestReceiveData(const Sender: TObject; AContentLength,
@@ -392,6 +458,34 @@ type
     procedure TBPBGrassLoadDistanceTrackBarChange(Sender: TObject);
     procedure P3Dv5ButtonClick(Sender: TObject);
     procedure InstalledSimsTabShow(Sender: TObject);
+    procedure VincentParkingLotToggleSwitchClick(Sender: TObject);
+    procedure Vincent2019W2XPButtonClick(Sender: TObject);
+    procedure Vincent2019W2XPButtonMouseEnter(Sender: TObject);
+    procedure InstagramImageClick(Sender: TObject);
+    procedure CaribSkyProducts1Click(Sender: TObject);
+    procedure DownloadManager1Click(Sender: TObject);
+    procedure CommonSettings1Click(Sender: TObject);
+    procedure Close1Click(Sender: TObject);
+    procedure TDPDSlopeToggleSwitchMouseEnter(Sender: TObject);
+    procedure TDPDSlopeToggleSwitchClick(Sender: TObject);
+    procedure TDPD2023W2XPButtonClick(Sender: TObject);
+    procedure XP12ButtonClick(Sender: TObject);
+    procedure BannerImageClick(Sender: TObject);
+    procedure Dominica2023ClickImageClick(Sender: TObject);
+    procedure TDPD2023Show(Sender: TObject);
+    procedure TDPDSlopeToggleSwitchMouseLeave(Sender: TObject);
+    procedure P3Dv6ButtonClick(Sender: TObject);
+    procedure DynamicLightsBrightnessToggleSwitchClick(Sender: TObject);
+    procedure NetHTTPClientRequestError(const Sender: TObject;
+      const AError: string);
+    procedure RWY26MWCLInfoImageClick(Sender: TObject);
+    procedure RWY26MWCLClickImageClick(Sender: TObject);
+    procedure CaymanIslandsw2XPButtonClick(Sender: TObject);
+    procedure RWY26MWCLTabSheetShow(Sender: TObject);
+    procedure SLDSOGSW2XPButtonClick(Sender: TObject);
+    procedure SLDSOGSInfoImageClick(Sender: TObject);
+    procedure SLDP3Dv5ToggleSwitchClick(Sender: TObject);
+    procedure SLDSOGSClickImageClick(Sender: TObject);
 
 
   private
@@ -408,23 +502,23 @@ type
     //FAsyncResult: AsyncResult;
     //FDownloadStream: TStream;
 
-    RSCommonInstallLocation_XP, BGIInstallLocation_XP, SVDInstallLocation_XP, TBPBInstallLocation_XP,
-    RSCommonInstallLocation, {GNDInstallLocation,} ANUInstallLocation, SVDInstallLocation, BGIInstallLocation, SKNInstallLocation, TBPBInstallLocation, {DOMInstallLocation,}
+    RSCommonInstallLocation_XP, BGIInstallLocation_XP, SVDInstallLocation_XP, TBPBInstallLocation_XP, TDPDInstallLocation_XP,
+    RSCommonInstallLocation, {GNDInstallLocation,} ANUInstallLocation, SVDInstallLocation, BGIInstallLocation, SKNInstallLocation, TBPBInstallLocation, TDPDInstallLocation, SLDSOGSInstallLocation,
     MKTBPBPath, TSTAPAPath, TSTVSVPath, T2GTKPKPath,
     sim, simpath, LWCFGpath, sceneryCFGPath, AddonXML,
     managerURL, URL, downloadedfilename, PatchingProduct: string;
 
-    ProgramDataPaths,AppDataPaths: array [0..7] of string;
-    PatchURLs: array [0..7] of string;
+    ProgramDataPaths,AppDataPaths: array [0..9] of string;
+    PatchURLs: array [0..8] of string;
     InstalledProducts: Tarray<Integer>;
-    SODEProductArray: array [0..1] of TSODEProduct;
+    SODEProductArray: array [0..2] of TSODEProduct;
 
     DownloadGif: TGIFImage;
 
     Compare, ReceivingData, DataReceived : boolean;
     TaskGetVersions, TaskCompareVersions, TaskDownloadUpdate, TaskInstall, TaskCheckForUpdates, TaskTimeOut: ITask;
-    InfoImages: array[0..7] of TImage;
-    UpdateLabels: array[0..7] of TLabel;
+    InfoImages: array[0..9] of TImage;
+    UpdateLabels: array[0..9] of TLabel;
     TBPBGrassDistanceTrackBarLastPosition, TBPBGrassFadeTrackBarLastPosition, FirstFire: integer;
     StarReview: string;
 
@@ -439,52 +533,6 @@ var
   MainForm: TMainForm;
 
 const
-    supportedsims: array [0..7] of string =
-    ('p3dv4',
-    'p3dv3',
-    'p3dv2',
-    'p3d',
-    'fsxse',
-    'fsx',
-    'xp11',
-    'p3dv5');
-
-   simkeys64: array [0..7] of string =
-   ('SOFTWARE\Lockheed Martin\Prepar3D v4',
-    'SOFTWARE\Lockheed Martin\Prepar3D v3',
-    'SOFTWARE\Lockheed Martin\Prepar3D v2',
-    'SOFTWARE\LockheedMartin\Prepar3D',
-    'SOFTWARE\DovetailGames\FSX',
-    'SOFTWARE\Microsoft\Microsoft Games\Flight Simulator\10.0',
-    'x-plane_install_11.txt',
-    'SOFTWARE\Lockheed Martin\Prepar3D v5');
-
-   simkeys32: array [0..7] of string =
-   ('SOFTWARE\Lockheed Martin\Prepar3D v4',
-    'SOFTWARE\Wow6432Node\Lockheed Martin\Prepar3D v3',
-    'SOFTWARE\Wow6432Node\Lockheed Martin\Prepar3D v2',
-    'SOFTWARE\Wow6432Node\LockheedMartin\Prepar3D',
-    'SOFTWARE\Wow6432Node\DovetailGames\FSX',
-    'SOFTWARE\Wow6432Node\Microsoft\Microsoft Games\Flight Simulator\10.0',
-    'x-plane_install_11.txt',
-    'SOFTWARE\Wow6432Node\Lockheed Martin\Prepar3D v5');
-
-   RSProducts: array [0..7] of string =
-   ('RS Grenada 2020',
-   'RS St Kitts 2017',
-   'RS Barbados 2017',
-   'RS Antigua 2018',
-   'RS St Vincent 2019',
-   'RS Dominica 2019',
-   'RS Common',
-   'RS TBPB 2020');
-
-   RSXPProducts: array [0..3] of string =
-   ('RS_Common',
-   'RS_TBPB_2020',
-   'RS_Barbados_2017',
-   'RS_St_Vincent_2019');
-
    //ensure that links are http://
    ReviewURL: array [0..7] of PWideChar =
    ('',
@@ -539,6 +587,11 @@ begin
 end;
 
 procedure TMainForm.SetGlobalVariables(simulator: string; simindex: integer);
+// Called once when the user clicks a simulator button (FSX, P3D vX, XP11/12).
+// Resolves all install paths, detects installed RS products, writes install
+// locations to the registry, and builds the SODEProductArray for this session.
+// Must complete before any product tab's OnShow event fires — tab navigation
+// is disabled until this returns.
 var SODEproduct: TSODEProduct;
     v, stat: string;
 begin
@@ -551,7 +604,7 @@ begin
 
   sim := simulator;
   Simpath := GetSimPath(simkeys64[simindex], simkeys32[simindex]);
-  If ContainsText(sim, 'xp11') then
+  If ContainsText(sim, 'xp') then
   begin
     sceneryCFGpath := Simpath+'Custom Scenery\';
     LWCFGpath:='';
@@ -565,13 +618,14 @@ begin
   InstalledProducts:= DetectInstalledProducts(SimPath, AddonXML, sceneryCFGPath, sim, UseP3DAutogenSystemBtn.Checked);
 
 
-  If ContainsText(sim, 'xp11') then
+  If ContainsText(sim, 'xp') then
   begin
 
     RSCommonInstallLocation_XP := FindInstallLocation('RS_Common', sceneryCFGpath, simpath, sim);
     BGIInstallLocation_XP := FindInstallLocation('RS_Barbados_2017', sceneryCFGpath, simpath, sim);
     SVDInstallLocation_XP := FindInstallLocation('RS_St_Vincent_2019', sceneryCFGpath, simpath, sim);
     TBPBInstallLocation_XP := FindInstallLocation('RS_TBPB_2020', sceneryCFGpath, simpath, sim);
+    TDPDInstallLocation_XP := FindInstallLocation('RS_Dominica_2023', sceneryCFGpath, simpath, sim);
 
   end
   else
@@ -588,14 +642,15 @@ begin
     SVDInstallLocation := FindInstallLocation('RS St Vincent 2019', sceneryCFGpath, simpath, sim);
     TSTVSVPath := FindInstallLocation('TVSV-TERRAIN', sceneryCFGpath, simpath, sim);
     TBPBInstallLocation := FindInstallLocation('RS TBPB 2020', sceneryCFGpath, simpath, sim);
-    //DOMInstallLocation := FindInstallLocation('RS Dominica 2019', sceneryCFGpath, simpath, sim);
+    TDPDInstallLocation := FindInstallLocation('RS Dominica 2023', sceneryCFGpath, simpath, sim);
+    SLDSOGSInstallLocation := FindInstallLocation('SkyLane Designs SOGS', sceneryCFGpath, simpath, sim);
 
   end;
 
   //Write Install Locations into registry for use by patch installers
   WriteProductLocationToReg(Self.Handle, 'RSSCT' ,Application.ExeName);
 
-  If ContainsText(sim, 'xp11') then
+  If ContainsText(sim, 'xp') then
   begin
 
     If RSCommonInstallLocation_XP<>'' then
@@ -625,15 +680,16 @@ begin
       WriteProductLocationToReg(Self.Handle, RSProducts[4] ,SVDInstallLocation);
     If TBPBInstallLocation<>'' then
       WriteProductLocationToReg(Self.Handle, RSProducts[7] ,TBPBInstallLocation);
-  //  If DOMInstallLocation<>'' then
-  //    WriteProductLocationToReg(RSProducts[5] ,DOMInstallLocation);
+    If TDPDInstallLocation<>'' then
+      WriteProductLocationToReg(Self.Handle, RSProducts[5] ,TDPDInstallLocation);
 
   end;
 
   //create SODEPrdouct Array, edit later
   SODEProductArray[0] := TSODEProduct.Create;
   SODEProductArray[1] := TSODEProduct.Create;
-  If ContainsText(sim, 'xp11') then
+  SODEProductArray[2] := TSODEProduct.Create;
+  If ContainsText(sim, 'xp') then
   begin
 
       //SAM code here????????????????????
@@ -668,6 +724,18 @@ begin
       SODEXML := GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\xml\RS_TBPB.xml';
       TextureCFG := GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TBPB\texture\texture.cfg';
     end;
+
+    //RS Dominica 2023
+    With SODEProductArray[2] do
+    begin
+      name := RSProducts[5];
+      Index := 5;
+      LegacyPatchButton := nil;
+      InstallLocation := TDPDInstallLocation;
+      PatchFile := '';
+      SODEXML := GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\xml\RS_TDPD.xml';
+      TextureCFG := GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD\texture\texture.cfg';
+    end;
     //SODEProductArray[1] := TBPBSODEProduct;
     //AnSODEProduct.Free;
 
@@ -678,7 +746,7 @@ begin
   If VerboseLoggingCheckbox.Checked then
   begin
 
-    If ContainsText(sim, 'xp11') then
+    If ContainsText(sim, 'xp') then
     begin
 
       stat := SLineBreak + '[RSSCT]' + SLineBreak +
@@ -713,7 +781,7 @@ begin
           'SVDInstallLocation= ' + SVDInstallLocation + SLineBreak +
           'TSTVSVPath= ' + TSTVSVPath + SLineBreak +
           'TBPBInstallLocation= ' + TBPBInstallLocation + SLineBreak +
-          //DOMInstallLocation + SLineBreak +
+          'TDPDInstallLocation= ' + TDPDInstallLocation + SLineBreak +
           sLinebreak;
 
       stat := stat + '[SODE]' + SLineBreak;
@@ -729,27 +797,167 @@ begin
 end;
 
 
+procedure TMainForm.SLDP3Dv5ToggleSwitchClick(Sender: TObject);
+// SkyLane Designs SOGS ships with separate BGL sets for P3Dv4 and P3Dv5.
+// X-Plane uses a different format; this toggle only appears for FSX/P3D sims.
+// The active set is enabled by giving files a .bgl extension; the inactive
+// set is disabled by renaming to .off. Both sets must always be in opposing
+// states — enabling one requires disabling the other in the same operation.
+begin
+
+  If SLDP3Dv5ToggleSwitch.state = tssOff then
+  begin
+    //rename P3Dv5 files to off
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS.bgl', SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS.off');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_CVX.bgl', SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_CVX.off');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_OBJ.bgl', SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_OBJ.off');
+    //rename P3Dv4 files to bgl
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS.off', SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS.bgl');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_CVX.off', SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_CVX.bgl');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_OBJ.off', SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_OBJ.bgl');
+  end
+  else
+  begin
+    //rename P3Dv5 files to bgl
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS.off', SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS.bgl');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_CVX.off', SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_CVX.bgl');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_OBJ.off', SLDSOGSInstallLocation+'scenery\SOGS_ADEP5_RS_OBJ.bgl');
+    //rename P3Dv4 files to off
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS.bgl', SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS.off');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_CVX.bgl', SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_CVX.off');
+    RenameFile(SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_OBJ.bgl', SLDSOGSInstallLocation+'scenery\SOGS_ADEP4_RS_OBJ.off');
+  end;
+end;
+
+procedure TMainForm.SLDSOGSClickImageClick(Sender: TObject);
+begin
+  SettingsPageControl.ActivePageIndex := 11;
+end;
+
+procedure TMainForm.SLDSOGSInfoImageClick(Sender: TObject);
+begin
+
+  With SLDSOGSInfoImage do
+    begin
+      PatchingProduct := RSproducts[9];
+      If Hint = 'Buy Now...' then
+      begin
+//        If ContainsText(sim, 'xp') then
+//          xp link here
+//        else
+          ShellExecute(self.WindowHandle,'open','https://richersimulations.com',nil,nil, SW_SHOWNORMAL);
+      end;
+      If Hint = 'Update' then
+      begin
+//        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//        If FindFirst('*Kitts*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//        begin
+//          SettingsPageControl.ActivePageIndex := 7;
+          URL := patchURLs[6];
+//          downloadedfilename := FileNameFromURL(URL);
+//          Download(URL);
+//        end
+//        else
+//          Install('patch', SearchResult.Name, PatchingProduct);
+//        FindClose(SearchResult);
+       ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
+      end;
+      visible := false;
+      UpdateLabels[7].Caption := '';
+    end;
+
+
+end;
+
+procedure TMainForm.SLDSOGSW2XPButtonClick(Sender: TObject);
+var SL: TStringList;
+    x: integer;
+begin
+
+  If MyMessageDialog('Download 54MB W2XP Autogen Upgrade Pack?'#13#10'(96MB of free space is needed to install.)',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+  begin
+//    PatchingProduct := RSproducts[4];
+//    If FindFirst('StVincent2019_HDTexturePack.exe',faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+      URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FSLD_SOGS_W2XP.zip?alt=media&token=72e11337-9115-4576-a174-9e844c6fe62c';
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+    ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
+    MessageDlg('Please remember to install the following necessary free libraries:'+sLineBreak+' - W2XP World Models'+sLineBreak+' - OpenSceneryX'+sLineBreak+' - R2 Library'+sLineBreak+' - ff Library', mtInformation, [mbOK], 0);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/32135-world-models-library/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://www.opensceneryx.com/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('http://r2.xpl.cz/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/12708-fflibrary/'),nil,nil, SW_SHOWNORMAL);
+
+    If MyMessageDialog('Would you like to add the Cayman Islands W2XP Autogen Upgrade Pack to the scenery_packs.ini in the correct position now?',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+    begin
+      SL := TStringList.Create;
+      try
+        SL.LoadFromFile(sceneryCFGPath+'scenery_packs.ini');
+        If SL.IndexOf('SCENERY_PACK Custom Scenery/SLD_SOGS_W2XP/') = -1 then
+        begin
+          x:= SL.IndexOf('SCENERY_PACK Custom Scenery/SLD_SOGS/')+1;  //insert below the Dominica scenery
+          If x < 4 then
+            x := 4;         //just in case we cant find the st. vincent scenery
+          SL.Insert(x, 'SCENERY_PACK Custom Scenery/SLD_SOGS_W2XP/');
+          SL.SaveToFile(sceneryCFGPath+'scenery_packs.ini');
+          ShowMessage('Added!');
+        end;
+      finally
+        SL.Free;
+      end;
+    end;
+
+  end;
+end;
+
 procedure TMainForm.SODEButtonClick(Sender: TObject);
 var log: string;
     lSearchRec:TSearchRec;
     lPath:string;
 
 begin
-  lPath := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName));
+//Checks for SODE on P3D/FSX and SAM Suit on XP11
 
-  if FindFirst(lPath+'Installer_SODE*.msi',faAnyFile,lSearchRec) = 0 then
+  If ContainsText(sim, 'xp') then
   begin
-    try
-      If CheckforSODEInstall(sim, LWCFGPath) < 1650 then
-      begin
-        If MessageDlg('SODE not detected our out of date. Proceed with installation of '+lSearchRec.Name+'?', mtInformation, mbYesNO, 0, mbYes) = mrYes then
-          RunProgramWaiting(lSearchRec.Name, '', [''], log);
-      end
-      else
-        LoadImageResource(SODEInfoImage, HInstance, 'SODEInstalled');
-    finally
-      FindClose(lSearchRec);  // Free resources on successful find
+
+    If not DirectoryExists(SimPath+'Resources\plugins\SAM') then
+    begin
+       If MessageDlg('SAM Plugin not found! This is neccessary for jetway animation. Would you like to download the SAM Suite now?', mtWarning, mbOKCancel,0) = mrYes then
+       begin
+          ShellExecute(self.WindowHandle,'open','https://forums.x-plane.org/index.php?/files/file/59782-scenery-animation-manager-suite/',nil,nil, SW_SHOWNORMAL);
+       end;
+    end
+    else
+      ShowMessage('SAM Plugin Found. All good.');
+
+  end
+  else
+  begin
+
+    lPath := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName));
+
+    if FindFirst(lPath+'Installer_SODE*.msi',faAnyFile,lSearchRec) = 0 then
+    begin
+      try
+        If CheckforSODEInstall(sim, LWCFGPath) < 1650 then
+        begin
+          If MessageDlg('SODE not detected our out of date. Proceed with installation of '+lSearchRec.Name+'?', mtInformation, mbYesNO, 0, mbYes) = mrYes then
+            RunProgramWaiting(lSearchRec.Name, lPath, [''], log);
+        end
+        else
+          LoadImageResource(SODEInfoImage, HInstance, 'SODEInstalled');
+      finally
+        FindClose(lSearchRec);  // Free resources on successful find
+      end;
     end;
+
   end;
 
 end;
@@ -826,25 +1034,26 @@ begin
   begin
     If Hint = 'Buy Now...' then
     begin
-      If Sim = 'xp11' then
+      If ContainsText(sim, 'xp') then
         //xp link here
       else
         ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations-caribsky-antigua-2018-fsx-p3d.phtml',nil,nil, SW_SHOWNORMAL);
     end;
     If Hint = 'Update' then
     begin
-      PatchingProduct := RSproducts[3];
-      newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
-      If FindFirst('*Antigua*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
-      begin
-        SettingsPageControl.ActivePageIndex := 7;
+//      PatchingProduct := RSproducts[3];
+//      newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//      If FindFirst('*Antigua*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//      begin
+//        SettingsPageControl.ActivePageIndex := 7;
         URL := patchURLs[3];
-        downloadedfilename := FileNameFromURL(URL);
-        Download(URL);
-      end
-      else
-        Install('patch', SearchResult.Name, PatchingProduct);
-      FindClose(SearchResult);
+//        downloadedfilename := FileNameFromURL(URL);
+//        Download(URL);
+//      end
+//      else
+//        Install('patch', SearchResult.Name, PatchingProduct);
+//      FindClose(SearchResult);
+      ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
     end;
     visible := false;
     UpdateLabels[3].Caption := '';
@@ -854,7 +1063,7 @@ end;
 procedure TMainForm.Antigua2018Show(Sender: TObject);
 begin
 
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     TAPACompatibilityToggleSwitch.Visible := false;
@@ -870,6 +1079,11 @@ begin
       TAPACompatibilityToggleSwitch.Enabled := false;
 end;
 
+procedure TMainForm.BannerImageClick(Sender: TObject);
+begin
+  ShellExecute(self.WindowHandle,'open','https://richersimulations.com/',nil,nil, SW_SHOWNORMAL);
+end;
+
 procedure TMainForm.Barbados2017ClickImageClick(Sender: TObject);
 begin
   SettingsPageControl.ActivePageIndex := 5;
@@ -883,25 +1097,26 @@ begin
     begin
       If Hint = 'Buy Now...' then
       begin
-        If Sim = 'xp11' then
+        If ContainsText(sim, 'xp') then
           //xp link here
         else
           ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations-caribsky-barbados-2017-fsx-fsxse-p3d.phtml',nil,nil, SW_SHOWNORMAL);
       end;
       If Hint = 'Update' then
       begin
-        PatchingProduct := RSproducts[2];
-        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
-        If FindFirst('*Barbados*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
-        begin
-          SettingsPageControl.ActivePageIndex := 7;
+//        PatchingProduct := RSproducts[2];
+//        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//        If FindFirst('*Barbados*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//        begin
+//          SettingsPageControl.ActivePageIndex := 7;
           URL := patchURLs[2];
-          downloadedfilename := FileNameFromURL(URL);
-          Download(URL);
-        end
-        else
-          Install('patch', SearchResult.Name, PatchingProduct );
-        FindClose(SearchResult);
+//          downloadedfilename := FileNameFromURL(URL);
+//          Download(URL);
+//        end
+//        else
+//          Install('patch', SearchResult.Name, PatchingProduct );
+//        FindClose(SearchResult);
+       ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
       end;
       visible := false;
       UpdateLabels[2].Caption := '';
@@ -916,7 +1131,7 @@ end;
 procedure TMainForm.Barbados2018Show(Sender: TObject);
 begin
 
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     TBPBCompatibilityToggleSwitch.Visible := false;
@@ -943,6 +1158,11 @@ end;
 procedure TMainForm.CaribSkyButtonClick(Sender: TObject);
 begin
   SettingsPageControl.ActivePageIndex := 2;
+end;
+
+procedure TMainForm.CaribSkyProducts1Click(Sender: TObject);
+begin
+  CaribSkyButton.Click;
 end;
 
 procedure TMainForm.CaribSkyShow(Sender: TObject);
@@ -973,6 +1193,7 @@ begin
     ProgressBarDownload2.Parent := TabPanel;
     DownloadingImage.Parent := TabPanel;
     DownloadingImage.center := true;
+    DownloadingLabel.Parent := TabPanel;
 
     //reorder items
     ProgressBarDownload2.Top := 0;
@@ -982,14 +1203,12 @@ begin
     DownloadingImage.Top := ProgressBarDownload2.Top + ProgressBarDownload2.height +1;
 
     //disable products not available for xp
-    If sim = 'xp11' then
+    If ContainsText(sim, 'xp') then
     begin
 
-      LoadImageResource(Vincent2019InfoImage, Hinstance, 'Coming_Soon');
       LoadImageResource(Barbados2017InfoImage, Hinstance, 'Coming_Soon');
       LoadImageResource(Antigua2018InfoImage, Hinstance, 'Coming_Soon');
       LoadImageResource(Kitts2017InfoImage, Hinstance, 'Coming_Soon');
-      LoadImageResource(Dominica2019InfoImage, Hinstance, 'Coming_Soon');
       LoadImageResource(GrenadaInfoImage, Hinstance, 'Coming_Soon');
 
     end;
@@ -997,17 +1216,18 @@ begin
     EnableProductImages(InstalledProducts);
 
     //TaskCheckForUpdates in background thread
-    TThread.Queue(nil,
-            procedure
-            begin
-              CheckForUpdates;
-            end);
+//    TThread.Queue(nil,
+//            procedure
+//            begin
+    If not ReceivingData then
+      CheckForUpdates;
+//            end);
 
   end;
 
   //search for prodcuts which use SODE in Installed Products and install SODE and required simobjects+xml files if required
   //check for SODE
-  If sim <> 'xp11' then
+  If not ContainsText(sim, 'xp') then
   begin
     SODEButtonClick(self);
     For Product in SODEProductArray do
@@ -1033,6 +1253,53 @@ begin
 
 end;
 
+procedure TMainForm.CaymanIslandsw2XPButtonClick(Sender: TObject);
+var SL: TStringList;
+    x: integer;
+begin
+
+  If MyMessageDialog('Download 54MB W2XP Autogen Upgrade Pack?'#13#10'(91MB of free space is needed to install.)',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+  begin
+//    PatchingProduct := RSproducts[4];
+//    If FindFirst('StVincent2019_HDTexturePack.exe',faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+      URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FRS_CaymanIslands_W2XP.zip?alt=media&token=951fb2c6-2e55-4219-9e1a-947609cf4005';
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+    ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
+    MessageDlg('Please remember to install the following necessary free libraries:'+sLineBreak+' - W2XP World Models'+sLineBreak+' - OpenSceneryX'+sLineBreak+' - R2 Library'+sLineBreak+' - ff Library', mtInformation, [mbOK], 0);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/32135-world-models-library/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://www.opensceneryx.com/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('http://r2.xpl.cz/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/12708-fflibrary/'),nil,nil, SW_SHOWNORMAL);
+
+    If MyMessageDialog('Would you like to add the Cayman Islands W2XP Autogen Upgrade Pack to the scenery_packs.ini in the correct position now?',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+    begin
+      SL := TStringList.Create;
+      try
+        SL.LoadFromFile(sceneryCFGPath+'scenery_packs.ini');
+        If SL.IndexOf('SCENERY_PACK Custom Scenery/RS_CaymanIslands_W2XP/') = -1 then
+        begin
+          x:= SL.IndexOf('SCENERY_PACK Custom Scenery/RWY26_MWCL/')+1;  //insert below the Dominica scenery
+          If x < 4 then
+            x := 4;         //just in case we cant find the st. vincent scenery
+          SL.Insert(x, 'SCENERY_PACK Custom Scenery/RS_CaymanIslands_W2XP/');
+          SL.SaveToFile(sceneryCFGPath+'scenery_packs.ini');
+          ShowMessage('Added!');
+        end;
+      finally
+        SL.Free;
+      end;
+    end;
+
+  end;
+end;
+
 procedure TMainForm.CommonButtonClick(Sender: TObject);
 begin
   SettingsPageControl.ActivePageIndex := 1;
@@ -1043,29 +1310,36 @@ var SearchResult: TSearchRec;
 begin
   If CommonInfoImage.Hint = 'Update' then
   begin
-    PatchingProduct := RSproducts[6];
-    If FindFirst('*Common*.exe',faAnyFile,SearchResult)<>0 then
-    begin
-      SettingsPageControl.ActivePageIndex := 7;
+//    PatchingProduct := RSproducts[6];
+//    If FindFirst('*Common*.exe',faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
       URL := patchURLs[6];
-      downloadedfilename := FileNameFromURL(URL);
-      Download(URL);
-    end
-    else
-      Install('patch', SearchResult.Name, PatchingProduct);
-    FindClose(SearchResult);
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('patch', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+   ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
   end;
   CommonInfoImage.visible := false;
   UpdateLabels[6].Caption := '';
 end;
 
+procedure TMainForm.CommonSettings1Click(Sender: TObject);
+begin
+  CommonButton.Click;
+end;
+
 procedure TMainForm.CommonShow(Sender: TObject);
 begin
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     ACMPanel.Visible := false;
-    SODEPanel.Visible := false;
+    SODEButton.caption := 'Check SAM Plugin';
+    PurgeSODEButton.Visible := false;
     StreetLightPanel.Visible := false;
     TrafficPanel.Visible := false;
     SceneryXMLCFGPanel.Visible := false;
@@ -1202,7 +1476,7 @@ begin
       Foundproducts := DetectInstalledProducts(SimPath, AddonXML, sceneryCFGPath, sim, UseP3DAutogenSystemBtn.Checked);
 
       //do a search for products in the given directory
-      If sim='xp11' then
+      If ContainsText(sim, 'xp') then
       begin
 //        SetLength(products, length(RSXPProducts));
 //        move(RSXPProducts[Low(RSProducts)], products[Low(products)], SizeOf(RSXPproducts));
@@ -1230,8 +1504,8 @@ begin
       For x in InstalledProducts do
       begin
 
-        If sim = 'xp11' then
-//          AddToSceneryLibrary(x, SceneryCFGPath+'scenery_packs.ini', d)
+        If ContainsText(sim, 'xp') then
+          AddToSceneryLibrary(x, SceneryCFGPath+'scenery_packs.ini', d)
         else
         begin
           If isLegacySim(sim) then
@@ -1240,7 +1514,7 @@ begin
 
       end;
 
-      //add searched products to add.xml
+      //add searched products to addon.xml
       If not isLegacySim(sim) then
       begin
 
@@ -1261,7 +1535,7 @@ begin
                    '</AddOn.Name>'#13#10#9'<AddOn.Description>'+RSproducts[searchedproducts[x]]+
                    '</AddOn.Description>'#13#10#9'<AddOn.Component>'#13#10#9#9'<Category>Scenery</Category>'#13#10#9#9'<Path>'+d+RSproducts[searchedproducts[x]]+
                    '</Path>'#13#10#9#9'<Name>'+RSproducts[searchedproducts[x]]+
-                   '</Name>'#13#10#9#9'<Required>False</Required>'#13#10#9'</AddOn.Component>', [rfReplaceAll]);
+                   '</Name>'#13#10#9#9'<Required>True</Required>'#13#10#9'</AddOn.Component>', [rfReplaceAll]);
               {end;}
 
               //change paths global variable paths to new product locations
@@ -1271,7 +1545,7 @@ begin
                 2: BGIInstallLocation := d+RSproducts[searchedproducts[x]];
                 3: ANUInstallLocation := d+RSproducts[searchedproducts[x]];
                 4: SVDInstallLocation := d+RSproducts[searchedproducts[x]];
-      //          5: DOMInstallLocation := d+RSproducts[searchedproducts[x]];
+                5: TDPDInstallLocation := d+RSproducts[searchedproducts[x]];
                 6: RSCommonInstallLocation := d+RSproducts[searchedproducts[x]];
               end;
 
@@ -1310,35 +1584,43 @@ end;
 
 
 
-procedure TMainForm.Dominica2019InfoImageClick(Sender: TObject);
-//var SearchResult: TSearchRec;
-//    newversion: string;
+procedure TMainForm.Dominica2023ClickImageClick(Sender: TObject);
 begin
-//  With Dominica2019InfoImage do
-//  begin
-//    If Hint = 'Buy Now...' then
-//      begin
-//        If Sim = 'xp11' then
-//          //xp link here
+  SettingsPageControl.ActivePageIndex := 9;
+end;
+
+procedure TMainForm.Dominica2023InfoImageClick(Sender: TObject);
+var SearchResult: TSearchRec;
+    newversion: string;
+begin
+  With Dominica2023InfoImage do
+    begin
+      PatchingProduct := RSproducts[5];
+      If Hint = 'Buy Now...' then
+      begin
+//        If ContainsText(sim, 'xp') then
+//          xp link here
 //        else
-//        ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations.mhtml',nil,nil, SW_SHOWNORMAL);
-//      end;
-//    If Hint = 'Update' then
-//    begin
-//      If FindFirst('*Dominica*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
-//      begin
-//        SettingsPageControl.ActivePageIndex := 7;
-//        URL := patchURLs[5];
-//        downloadedfilename := FileNameFromURL(URL);
-//        Download(URL);
-//      end
-//      else
-//        Install('patch', SearchResult.Name);
-//      FindClose(SearchResult);
-//    end;
-//    visible := false;
-//    UpdateLabels[5].Caption := '';
-//  end;
+          ShellExecute(self.WindowHandle,'open','https://richersimulations.com',nil,nil, SW_SHOWNORMAL);
+      end;
+      If Hint = 'Update' then
+      begin
+//        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//        If FindFirst('*Kitts*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//        begin
+//          SettingsPageControl.ActivePageIndex := 7;
+          URL := patchURLs[5];
+//          downloadedfilename := FileNameFromURL(URL);
+//          Download(URL);
+//        end
+//        else
+//          Install('patch', SearchResult.Name, PatchingProduct);
+//        FindClose(SearchResult);
+       ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
+      end;
+      visible := false;
+      UpdateLabels[5].Caption := '';
+    end;;
 end;
 
 procedure TMainForm.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -1358,13 +1640,23 @@ var i: integer;
 
 
 begin
+
+  If not (ContainsText(Application.ExeName, '\Config\') or ContainsText(Application.ExeName, 'Win32'))then
+//  If not (ContainsText(Application.ExeName, '\Richer Simulations\Config\') or ContainsText(Application.ExeName, '\RS_Common\Config\') or ContainsText(Application.ExeName, 'Win32'))then
+  begin
+    MessageDlg('This tool has been moved or copied from its default location (the Config folder).'+sLineBreak+
+    'Please move it back, or create a shortcut to the RSSCT tool if you would like to access it from somewhere else.', mtError, [mbOk], 0);
+    Application.terminate;
+  end;
+
   //EnableMenuItem( GetSystemMenu( handle, False ),SC_CLOSE, MF_BYCOMMAND or MF_GRAYED );
   {application.onException := MyException;}
 
-  //place Downloading GIF and ProgressBar on Sim Selection page temporarily
+  //place Downloading GIF/label and ProgressBar on Sim Selection page temporarily
   DownloadingImage.Parent := InstalledSimsTab;
   DownloadingImage.center := false;
   ProgressBarDownload2.Parent := InstalledSimsTab;
+  DownloadingLabel.Parent := InstalledSimsTab;
 
   DeleteFile('RSSCT.bak');
 
@@ -1377,6 +1669,8 @@ begin
   ProgramDataPaths[5]:= GetEnvironmentVariable('ProgramData')+'\Microsoft\FSX\';
   ProgramDataPaths[6]:= '';   //space for XP11
   ProgramDataPaths[7]:= GetEnvironmentVariable('ProgramData')+'\Lockheed Martin\Prepar3D v5\';
+  ProgramDataPaths[8]:= GetEnvironmentVariable('ProgramData')+'\Lockheed Martin\Prepar3D v6\';
+  ProgramDataPaths[9]:= '';   //space for XP12
 
   AppDataPaths[0]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v4\' ;
   AppDataPaths[1]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v3\';
@@ -1386,6 +1680,8 @@ begin
   AppDataPaths[5]:= GetEnvironmentVariable('AppData')+'\Microsoft\FSX\';
   AppDataPaths[6]:= '' ;   //space for XP11
   AppDataPaths[7]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v5\' ;
+  AppDataPaths[8]:= GetEnvironmentVariable('AppData')+'\Lockheed Martin\Prepar3D v6\' ;
+  AppDataPaths[9]:= '' ;   //space for XP12
 
   for i := 0 to SettingsPageControl.PageCount - 1 do
       SettingsPageControl.Pages[i].TabVisible := False;
@@ -1419,6 +1715,8 @@ begin
             5: If FileExists(GetSimPath(simkeys64[5], simkeys32[5])+'FSX.exe') then fsxButton.Visible := true;
             6: {If FileExists(GetSimPath(simkeys64[6], simkeys32[6])+'X-Plane.exe') then} XP11Button.Visible := true;
             7: If FileExists(GetSimPath(simkeys64[7], simkeys32[7])+'Prepar3d.exe') then P3Dv5Button.Visible := true;
+            8: If FileExists(GetSimPath(simkeys64[8], simkeys32[8])+'Prepar3d.exe') then P3Dv6Button.Visible := true;
+            9: {If FileExists(GetSimPath(simkeys64[6], simkeys32[6])+'X-Plane.exe') then} XP12Button.Visible := true;
           End;
         end;
 
@@ -1473,6 +1771,8 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 procedure TMainForm.FSXSEButtonClick(Sender: TObject);
@@ -1482,6 +1782,8 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 procedure TMainForm.TBPB2020InfoImageClick(Sender: TObject);
@@ -1492,25 +1794,26 @@ begin
     begin
       If Hint = 'Buy Now...' then
       begin
-        If Sim = 'xp11' then
+        If ContainsText(sim, 'xp') then
           //xp link here
         else
           ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations.mhtml',nil,nil, SW_SHOWNORMAL);
       end;
       If Hint = 'Update' then
       begin
-        PatchingProduct := RSproducts[7];
-        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
-        If FindFirst('*TBPB*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
-        begin
-          SettingsPageControl.ActivePageIndex := 7;
+//        PatchingProduct := RSproducts[7];
+//        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//        If FindFirst('*TBPB*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//        begin
+//          SettingsPageControl.ActivePageIndex := 7;
           URL := patchURLs[7];
-          downloadedfilename := FileNameFromURL(URL);
-          Download(URL);
-        end
-        else
-          Install('patch', SearchResult.Name, PatchingProduct );
-        FindClose(SearchResult);
+//          downloadedfilename := FileNameFromURL(URL);
+//          Download(URL);
+//        end
+//        else
+//          Install('patch', SearchResult.Name, PatchingProduct );
+//        FindClose(SearchResult);
+       ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
       end;
       visible := false;
       UpdateLabels[7].Caption := '';
@@ -1539,7 +1842,7 @@ begin
   end;
 
   //initialize component states based on corresponding file states and sim
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     TBPBDynamicLightsToggleSwitch.Visible := false;
@@ -1939,7 +2242,7 @@ begin
 //  begin
 //    If Hint = 'Buy Now...' then
 //    begin
-//      If Sim = 'xp11' then
+//      If ContainsText(sim, 'xp') then
 //        //xp link here
 //      else
 //      ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations.mhtml',nil,nil, SW_SHOWNORMAL);
@@ -1957,6 +2260,7 @@ begin
 //      else
 //        Install('patch', SearchResult.Name);
 //      FindClose(SearchResult);
+//ShellExecute(self.WindowHandle,'open',URL,nil,nil, SW_SHOWNORMAL);
 //    end;
 //    visible := false;
 //    UpdateLabels[0].Caption := '';
@@ -2046,24 +2350,25 @@ begin
       PatchingProduct := RSproducts[1];
       If Hint = 'Buy Now...' then
       begin
-        If Sim = 'xp11' then
+        If ContainsText(sim, 'xp') then
           //xp link here
         else
           ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations-caribsky_st.-kitts-2017-fsx-fsxse-p3d.phtml',nil,nil, SW_SHOWNORMAL);
       end;
       If Hint = 'Update' then
       begin
-        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
-        If FindFirst('*Kitts*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
-        begin
-          SettingsPageControl.ActivePageIndex := 7;
+//        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//        If FindFirst('*Kitts*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//        begin
+//          SettingsPageControl.ActivePageIndex := 7;
           URL := patchURLs[1];
-          downloadedfilename := FileNameFromURL(URL);
-          Download(URL);
-        end
-        else
-          Install('patch', SearchResult.Name, PatchingProduct);
-        FindClose(SearchResult);
+//          downloadedfilename := FileNameFromURL(URL);
+//          Download(URL);
+//        end
+//        else
+//          Install('patch', SearchResult.Name, PatchingProduct);
+//        FindClose(SearchResult);
+       ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
       end;
       visible := false;
       UpdateLabels[1].Caption := '';
@@ -2074,7 +2379,7 @@ end;
 procedure TMainForm.Kitts2017Show(Sender: TObject);
 begin
 
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     TKPKCompatibilityToggleSwitch.Visible := false;
@@ -2126,17 +2431,18 @@ begin
 
   If MyMessageDialog('A 106MB installer will now be downloaded to patch files for '+AnsiUpperCase(sim)+'. Continue?',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
   begin
-    PatchingProduct := RSproducts[4];
-    If FindFirst('StVincent2019_LegacyPack.exe',faAnyFile,SearchResult)<>0 then
-    begin
-      SettingsPageControl.ActivePageIndex := 7;
-      URL := 'http://master.dl.sourceforge.net/project/caribsky/Vincent/StVincent2019_LegacyPack.exe';
-      downloadedfilename := FileNameFromURL(URL);
-      Download(URL);
-    end
-    else
-      Install('', SearchResult.Name, PatchingProduct);
-    FindClose(SearchResult);
+//    PatchingProduct := RSproducts[4];
+//    If FindFirst('StVincent2019_LegacyPack.exe',faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+      URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FStVincent2019_LegacyPack.exe?alt=media&token=64cffad1-a979-4218-927b-ee4d7e670228';
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+   ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
     SODEFileCheck(SODEProductArray[0]); //check to make sure that the texture fallback is added in the SODE texture.cfg after the Legacy Patch install
   end;
 
@@ -2344,7 +2650,7 @@ begin
              end;
           end;
 
-          If sim = 'xp11' then
+          If ContainsText(sim, 'xp') then
           begin
 //            FirstFire := 1;
 
@@ -2472,13 +2778,13 @@ procedure TMainForm.TBPBHDTexturesButtonClick(Sender: TObject);
 var SearchResult: TSearchRec;
     size,freespace,PatchingProduct,SetupName: string;
 begin
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
     size :=  '305';
     freespace := '751';
     PatchingProduct := RSXPproducts[1];
     SetupName := 'TBPB2020_XP_HDTexturePack.exe';
-    URL := 'http://master.dl.sourceforge.net/project/caribsky/xp/TBPB/TBPB2020_XP_HDTexturePack.exe';
+    URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FTBPB2020_XP_HDTexturePack.exe?alt=media&token=883ff20d-70b0-4979-905f-ef4cedacea53';
   end
   else
   begin
@@ -2486,20 +2792,21 @@ begin
     freespace := '960';
     PatchingProduct := RSproducts[7];
     SetupName := 'TBPB2020_HDTexturePack.exe';
-    URL := 'http://master.dl.sourceforge.net/project/caribsky/TBPB/TBPB2020_HDTexturePack.exe';
+    URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FTBPB2020_HDTexturePack.exe?alt=media&token=ad324a48-2ec2-41e4-a6d3-d7fc27c07999';
   end;
 
   If MyMessageDialog('Download '+size+'MB HD Texture Pack?'#13#10'('+freespace+'MB of free space is needed to install.)',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
   begin
-    If FindFirst(SetupName,faAnyFile,SearchResult)<>0 then
-    begin
-      SettingsPageControl.ActivePageIndex := 7;
-      downloadedfilename := FileNameFromURL(URL);
-      Download(URL);
-    end
-    else
-      Install('', SearchResult.Name, PatchingProduct);
-    FindClose(SearchResult);
+//    If FindFirst(SetupName,faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+   ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
   end;
 end;
 
@@ -2519,17 +2826,18 @@ begin
 
   If MyMessageDialog('A 347MB installer will now be downloaded to patch files for '+AnsiUpperCase(sim)+'. Continue?',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
   begin
-    PatchingProduct := RSproducts[7];
-    If FindFirst('TBPB2020_LegacyPack.exe',faAnyFile,SearchResult)<>0 then
-    begin
-      SettingsPageControl.ActivePageIndex := 7;
-      URL := 'http://master.dl.sourceforge.net/project/caribsky/TBPB/TBPB2020_LegacyPack.exe';
-      downloadedfilename := FileNameFromURL(URL);
-      Download(URL);
-    end
-    else
-      Install('', SearchResult.Name, PatchingProduct);
-    FindClose(SearchResult);
+//    PatchingProduct := RSproducts[7];
+//    If FindFirst('TBPB2020_LegacyPack.exe',faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+      URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FTBPB2020_LegacyPack.exe?alt=media&token=fa532ac3-2405-46c8-a38e-272f9717bc8e';
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+   ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
     //For SODEProduct in SODEProductArray do
     SODEFileCheck(SODEProductArray[1]); //check to make sure that the texture fallback is added in the SODE texture.cfg after the Legacy Patch install
   end;
@@ -2537,7 +2845,7 @@ end;
 
 procedure TMainForm.TBPBParkingLotToggleSwitchClick(Sender: TObject);
 begin
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     aProgressForm.caption := 'Setting LODs';
@@ -2593,7 +2901,7 @@ end;
 procedure TMainForm.TBPBVegComboBoxChange(Sender: TObject);
 begin
 
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
     aProgressForm.caption := 'Setting LODs';
     aProgressBar.max := 11;
@@ -2708,6 +3016,120 @@ begin
   ToggleTBPBDLImages(false);
 end;
 
+procedure TMainForm.TDPD2023Show(Sender: TObject);
+begin
+  If ContainsText(sim, 'xp') then
+  begin
+    TDPD2023W2XPButton.Visible := true;
+    TDPDSlopeToggleSwitch.Visible := false;
+  end
+  else
+  begin
+    TDPD2023W2XPButton.Visible := false;
+    TDPDSlopeToggleSwitch.Visible := true;
+  end;
+end;
+
+procedure TMainForm.TDPD2023W2XPButtonClick(Sender: TObject);
+var SL: TStringList;
+    x: integer;
+begin
+
+  If MyMessageDialog('Download 55MB W2XP Autogen Upgrade Pack?'#13#10'(382MB of free space is needed to install.)',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+  begin
+//    PatchingProduct := RSproducts[4];
+//    If FindFirst('StVincent2019_HDTexturePack.exe',faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+      URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/repository%2FXP%2FRS_Dominica_2023_W2XP.zip?alt=media&token=3b9ce82b-c02b-4b7c-8aa7-136353bf9f2a';
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+    ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
+    MessageDlg('Please remember to install the following necessary free libraries:'+sLineBreak+' - W2XP World Models'+sLineBreak+' - OpenSceneryX'+sLineBreak+' - R2 Library'+sLineBreak+' - ff Library', mtInformation, [mbOK], 0);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/32135-world-models-library/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://www.opensceneryx.com/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('http://r2.xpl.cz/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/12708-fflibrary/'),nil,nil, SW_SHOWNORMAL);
+
+    If MyMessageDialog('Would you like to add the Dominica 2023 W2XP Autogen Upgrade Pack to the scenery_packs.ini in the correct position now?',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+    begin
+      SL := TStringList.Create;
+      try
+        SL.LoadFromFile(sceneryCFGPath+'scenery_packs.ini');
+        If SL.IndexOf('SCENERY_PACK Custom Scenery/RS_Dominica_2023_W2XP/') = -1 then
+        begin
+          x:= SL.IndexOf('SCENERY_PACK Custom Scenery/RS_Dominica_2023/')+1;  //insert below the Dominica scenery
+          If x < 4 then
+            x := 4;         //just in case we cant find the st. vincent scenery
+          SL.Insert(x, 'SCENERY_PACK Custom Scenery/RS_Dominica_2023_W2XP/');
+          SL.SaveToFile(sceneryCFGPath+'scenery_packs.ini');
+          ShowMessage('Added!');
+        end;
+      finally
+        SL.Free;
+      end;
+    end;
+
+  end;
+end;
+
+procedure TMainForm.TDPDSlopeToggleSwitchClick(Sender: TObject);
+begin
+
+  If TDPDSlopeToggleSwitch.state = tssOff then  //copy the files from scenery/flat to scenery
+  begin
+    //delete sloped files
+    DeleteFile(TDPDInstallLocation+'scenery\Dominica2022_10m_mesh_TDPD_sloped.bgl');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_ADEP5_RS_CVX_sloped.bgl');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_ADEP5_RS_sloped.bgl');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_apptaxilights_fixtures_sloped.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_apron_lights_sloped_with_heading.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_GP_platform_sloped.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_Parking_Lot_Vehicles_sloped.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_sloped.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_terminal_lights_sloped.BGL');
+    //copy flat files
+    CopyFiles(TDPDInstallLocation+'scenery\flat\*', TDPDInstallLocation+'scenery\', FOF_NOCONFIRMATION);
+    //copy flat SODE files
+    CopyFiles(TDPDInstallLocation+'\SODE\SimObjects\SODE_RS_TDPD\models.flat\model.TDPD_apptaxilights_halos', GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD\', FOF_NOCONFIRMATION);
+    CopyFiles(TDPDInstallLocation+'\SODE\SimObjects\SODE_RS_TDPD\models.flat\model.TDPD_GP', GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD\', FOF_NOCONFIRMATION);
+    CopyFiles(TDPDInstallLocation+'\SODE\SimObjects\SODE_RS_TDPD\models.flat\model.TDPD_GP_Wet', GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD\', FOF_NOCONFIRMATION);
+  end
+  else  //copy the files from scenery/sloped to scenery
+  begin
+    //delete sloped files
+    DeleteFile(TDPDInstallLocation+'scenery\Dominica2022_10m_mesh_TDPD_flat.bgl');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_ADEP4_RS_CVX_flat.bgl');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_ADEP4_RS_flat.bgl');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_apptaxilights_fixtures_flat.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_apron_lights_flat_with_heading.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_flat.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_GP_platform_flat.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_Parking_Lot_Vehicles_flat.BGL');
+    DeleteFile(TDPDInstallLocation+'scenery\TDPD_terminal_lights_flat.BGL');
+    //copy sloped files
+    CopyFiles(TDPDInstallLocation+'scenery\sloped\*', TDPDInstallLocation+'scenery\', FOF_NOCONFIRMATION);
+    //copy sloped SODE files
+    CopyFiles(TDPDInstallLocation+'\SODE\SimObjects\SODE_RS_TDPD\models.sloped\model.TDPD_apptaxilights_halos', GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD\', FOF_NOCONFIRMATION);
+    CopyFiles(TDPDInstallLocation+'\SODE\SimObjects\SODE_RS_TDPD\models.sloped\model.TDPD_GP', GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD\', FOF_NOCONFIRMATION);
+    CopyFiles(TDPDInstallLocation+'\SODE\SimObjects\SODE_RS_TDPD\models.sloped\model.TDPD_GP_Wet', GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD\', FOF_NOCONFIRMATION);
+  end;
+end;
+
+procedure TMainForm.TDPDSlopeToggleSwitchMouseEnter(Sender: TObject);
+begin
+  LoadImageResource(TDPD2023Image, HInstance, 'TDPDSlope');
+end;
+
+procedure TMainForm.TDPDSlopeToggleSwitchMouseLeave(Sender: TObject);
+begin
+  LoadImageResource(TDPD2023Image, HInstance, 'Dominica_HR');
+end;
+
 procedure TMainForm.TKPKCompatibilityToggleSwitchClick(Sender: TObject);
 var Rslt : TSearchRec;
 begin
@@ -2772,7 +3194,14 @@ end;
 procedure TMainForm.UseP3DAutogenSystemBtnClick(Sender: TObject);
 begin
   If UseP3DAutogenSystemBtn.Checked then
-    ACMButton.Enabled := false
+  begin
+    ACMButton.Enabled := false;
+
+    If ContainsText(sim, 'P3D') then
+      MyMessageDialog('Please note that P3D Autogen system contains a bug where only ONE autogen package (the one with highest priority) can be used at a time.'+
+      'If you use other products which contain Autogen packages they may become disabled.'+
+      'To prevent this it is recommended to use ACM to override the P3D Autogen system.',mtWarning, mbOkCancel, ['OK'])
+  end
   else
   begin
     ACMButton.Enabled := true;
@@ -2814,25 +3243,26 @@ begin
     begin
       If Hint = 'Buy Now...' then
       begin
-        If Sim = 'xp11' then
-          //xp link here
+        If ContainsText(sim, 'xp') then
+          ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations-caribsky-st.-vincent-2019-xp11.phtml',nil,nil, SW_SHOWNORMAL)
         else
           ShellExecute(self.WindowHandle,'open','https://secure.simmarket.com/richer-simulations-caribsky-st.-vincent-2019-p3d.phtml',nil,nil, SW_SHOWNORMAL);
         end;
       If Hint = 'Update' then
       begin
-        PatchingProduct := RSproducts[4];
-        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
-        If FindFirst('*Vincent*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
-        begin
-          SettingsPageControl.ActivePageIndex := 7;
+//        PatchingProduct := RSproducts[4];
+//        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//        If FindFirst('*Vincent*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//        begin
+//          SettingsPageControl.ActivePageIndex := 7;
           URL := patchURLs[4];
-          downloadedfilename := FileNameFromURL(URL);
-          Download(URL);
-        end
-        else
-          Install('patch', SearchResult.Name, PatchingProduct );
-        FindClose(SearchResult);
+//          downloadedfilename := FileNameFromURL(URL);
+//          Download(URL);
+//        end
+//        else
+//          Install('patch', SearchResult.Name, PatchingProduct );
+//        FindClose(SearchResult);
+       ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
       end;
       visible := false;
       UpdateLabels[4].Caption := '';
@@ -2861,12 +3291,19 @@ begin
   end;
 
    //initialize component states based on corresponding file states
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     VincentDynamicLightsToggleSwitch.Visible := false;
     VincentApronShadowsToggleSwitch.Visible := false;
     SVDLegacyPatchButton.Visible := false;
+    InteriorToggleSwitch.Visible := false;
+    VincentGrassComboBox.Visible := false;
+    HighPolyVegToggleSwitch.Visible := false;
+    TVSVDragStripToggleSwitch.Visible := false;
+    Vincent2019W2XPButton.Visible := true;
+    TDPD2023W2XPButton.visible := true;
+    TDPDSlopeToggleSwitch.Visible := false;
 
     {
     //Parking Lot
@@ -2977,6 +3414,59 @@ begin
   If VerboseLoggingCheckbox.checked then
     LogUpdate(stat,'RSSCT_Verbose.log');
 
+end;
+
+procedure TMainForm.Vincent2019W2XPButtonClick(Sender: TObject);
+var SL: TStringList;
+    x: integer;
+begin
+
+  If MyMessageDialog('Download 75MB W2XP Autogen Upgrade Pack?'#13#10'(382MB of free space is needed to install.)',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+  begin
+//    PatchingProduct := RSproducts[4];
+//    If FindFirst('StVincent2019_HDTexturePack.exe',faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+      URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FStVincent2019_W2XP.exe?alt=media&token=3b72c574-c9be-4bd1-9d6d-80ede46cfeca';
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+    ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
+    MessageDlg('Please remember to install the following necessary free libraries:'+sLineBreak+' - W2XP World Models'+sLineBreak+' - OpenSceneryX'+sLineBreak+' - R2 Library'+sLineBreak+' - ff Library', mtInformation, [mbOK], 0);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/32135-world-models-library/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://www.opensceneryx.com/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('http://r2.xpl.cz/'),nil,nil, SW_SHOWNORMAL);
+    ShellExecute(self.WindowHandle,'open',PWideChar('https://forums.x-plane.org/index.php?/files/file/12708-fflibrary/'),nil,nil, SW_SHOWNORMAL);
+
+    If MyMessageDialog('Would you like to add the St Vincent 2019 W2XP Autogen Upgrade Pack to the scenery_packs.ini in the correct position now?',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+    begin
+      SL := TStringList.Create;
+      try
+        SL.LoadFromFile(sceneryCFGPath+'scenery_packs.ini');
+        If SL.IndexOf('SCENERY_PACK Custom Scenery/RS_St_Vincent_2019_W2XP/') = -1 then
+        begin
+          x:= SL.IndexOf('SCENERY_PACK Custom Scenery/RS_St_Vincent_2019/')+1;  //insert below the St Vincent scenery
+          If x < 4 then
+            x := 4;         //just in case we cant find the st. vincent scenery
+          SL.Insert(x, 'SCENERY_PACK Custom Scenery/RS_St_Vincent_2019_W2XP/');
+          SL.SaveToFile(sceneryCFGPath+'scenery_packs.ini');
+          ShowMessage('Added!');
+        end;
+      finally
+        SL.Free;
+      end;
+    end;
+
+  end;
+end;
+
+procedure TMainForm.Vincent2019W2XPButtonMouseEnter(Sender: TObject);
+begin
+  LoadImageResource(Vincent2019Image, HInstance, 'TVSV_hr');
+  ToggleSVDDLImages(false);
 end;
 
 procedure TMainForm.VincentApronShadowsToggleSwitchClick(Sender: TObject);
@@ -3128,20 +3618,34 @@ end;
 
 procedure TMainForm.VincentHDTexturesButtonClick(Sender: TObject);
 var SearchResult: TSearchRec;
+    size, freespace: string;
 begin
-  If MyMessageDialog('Download 256MB HD Texture Pack?'#13#10'(1.2GB of free space is needed to install.)',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+
+  If ContainsText(sim, 'xp') then
   begin
-    PatchingProduct := RSproducts[4];
-    If FindFirst('StVincent2019_HDTexturePack.exe',faAnyFile,SearchResult)<>0 then
-    begin
-      SettingsPageControl.ActivePageIndex := 7;
-      URL := 'http://master.dl.sourceforge.net/project/caribsky/Vincent/StVincent2019_HDTexturePack.exe';
-      downloadedfilename := FileNameFromURL(URL);
-      Download(URL);
-    end
-    else
-      Install('', SearchResult.Name, PatchingProduct);
-    FindClose(SearchResult);
+    size :=  '252';
+    freespace := '857';
+    URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FStVincent2019_W2XP.exe?alt=media&token=3b72c574-c9be-4bd1-9d6d-80ede46cfeca';
+  end
+  else
+  begin
+    size := '256';
+    freespace := '1200';
+    URL := 'https://firebasestorage.googleapis.com/v0/b/richersimulations-b57cb.appspot.com/o/downloads%2FStVincent2019_HDTexturePack.exe?alt=media&token=830f2b74-7f36-43f2-a6d6-54d3c451bae7';
+  end;
+
+  If MyMessageDialog('Download '+size+'MB HD Texture Pack?'#13#10'('+freespace+'MB of free space is needed to install.)',mtConfirmation, [mbOK, mbCancel],['Yes','No']) = mrOk then
+  begin
+//    If FindFirst(SetupName,faAnyFile,SearchResult)<>0 then
+//    begin
+//      SettingsPageControl.ActivePageIndex := 7;
+//      downloadedfilename := FileNameFromURL(URL);
+//      Download(URL);
+//    end
+//    else
+//      Install('', SearchResult.Name, PatchingProduct);
+//    FindClose(SearchResult);
+   ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
   end;
 end;
 
@@ -3154,10 +3658,46 @@ end;
 
 procedure TMainForm.VincentParkingLotToggleSwitchClick(Sender: TObject);
 begin
-  If VincentParkingLotToggleSwitch.state = tssOn then
+
+  If ContainsText(sim, 'xp') then
+  begin
+
+    aProgressForm.caption := 'Setting LODs';
+    aProgressBar.position := 0;
+    aProgressBar.max := 6;
+    aProgressForm.Show;
+
+    If VincentParkingLotToggleSwitch.state = tssOn then
+    begin
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_00.obj', 'ATTR_LOD 0.0 0.0', 'ATTR_LOD 0.0 3000.0'); aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_01.obj', 'ATTR_LOD 0.0 0.0', 'ATTR_LOD 0.0 3000.0');   aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_02.obj', 'ATTR_LOD 0.0 0.0', 'ATTR_LOD 0.0 3000.0'); aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_03.obj', 'ATTR_LOD 0.0 0.0', 'ATTR_LOD 0.0 3000.0');    aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_04.obj', 'ATTR_LOD 0.0 0.0', 'ATTR_LOD 0.0 3000.0');  aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_05.obj', 'ATTR_LOD 0.0 0.0', 'ATTR_LOD 0.0 3000.0');  aProgressBar.Position := aProgressBar.Position+1;
+      end
+    else
+    begin
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_00.obj', 'ATTR_LOD 3000.0 0.0', 'ATTR_LOD 0.0 0.0'); aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_01.obj', 'ATTR_LOD 3000.0 0.0', 'ATTR_LOD 0.0 0.0');   aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_02.obj', 'ATTR_LOD 3000.0 0.0', 'ATTR_LOD 0.0 0.0'); aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_03.obj', 'ATTR_LOD 3000.0 0.0', 'ATTR_LOD 0.0 0.0');    aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_04.obj', 'ATTR_LOD 3000.0 0.0', 'ATTR_LOD 0.0 0.0');  aProgressBar.Position := aProgressBar.Position+1;
+      ReplaceXMLEntry(SVDInstallLocation_XP+'objects\TVSA_parking_lot_05.obj', 'ATTR_LOD 3000.0 0.0', 'ATTR_LOD 0.0 0.0');  aProgressBar.Position := aProgressBar.Position+1;
+    end;
+    aProgressForm.Close;
+
+  end
+  else
+  begin
+
+    If VincentParkingLotToggleSwitch.state = tssOn then
       RenameFile(SVDInstallLocation+'scenery\TVSA_parking_lot.off',SVDInstallLocation+'scenery\TVSA_parking_lot.bgl')
     else
       RenameFile(SVDInstallLocation+'scenery\TVSA_parking_lot.bgl',SVDInstallLocation+'scenery\TVSA_parking_lot.off');
+
+  end;
+
 end;
 
 procedure TMainForm.VincentParkingLotToggleSwitchMouseEnter(Sender: TObject);
@@ -3174,6 +3714,19 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
+end;
+
+procedure TMainForm.XP12ButtonClick(Sender: TObject);
+begin
+  SetGlobalVariables('xp12', 9);
+  SettingsPageControl.ActivePageIndex := 2;
+  SettingsPageControl.width := MainForm.Width - TabPanel.Width;
+  TabPanel.Visible := true;
+  TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 {procedure TMainForm.MyException(sender: TObject; e: Exception);    //exceptions now handled by MadExcept
@@ -3186,6 +3739,13 @@ begin
                   LogUpdate(stat, 'RSSCT_verbose.log');
                       MessageDlg('Looks like a bug... but fear not! I hit it with a log (file)!', mtError, [mbOK], ['Whew!']);
                       end;}
+
+procedure TMainForm.NetHTTPClientRequestError(const Sender: TObject;
+  const AError: string);
+begin
+      Memo1.Lines.Add('Request error...');
+      DownloadingLabel.Caption := 'Request error...';
+end;
 
 procedure TMainForm.NetHTTPRequestReceiveData(const Sender: TObject;
   AContentLength, AReadCount: Int64; var Abort: Boolean);
@@ -3227,16 +3787,15 @@ begin
 //     ProgressBarDownload2.Max := AContentLength;
 //    end;
 //  end;
-  ProgressBarDownload.Max := 100;
 
-  TThread.Queue(nil,
-    procedure
-    begin
+//  TThread.Queue(nil,
+//    procedure
+//    begin
 
       If AContentLength > 0 then
       begin
-        ProgressBarDownload.position := AReadCount div AContentLength * 100;
-        ProgressBarDownload2.position := AReadCount div AContentLength * 100;
+        ProgressBarDownload.position := Trunc((AReadCount / AContentLength) * 100);
+        ProgressBarDownload2.position := ProgressBarDownload.position;
       end;
       LabelGlobalSpeed.caption := 'Downloading: '+downloadedfilename+Format('. %n MB of %n MB', [LRead, LSize])+ Format(' @ %d KB/s.', [LSpeed]) + Format(' %.0d:', [mins])+ Format('%.2d left', [secs]);
       //Memo1.Lines.Add('Receiving Data...');
@@ -3244,7 +3803,7 @@ begin
       CheckForUpdatesButton.Enabled := false;
       DataReceived := false;
       //Memo1.Lines.Add('ReceivingData:= TRUE;');
-    end);
+//    end);
 
 
 end;
@@ -3260,13 +3819,16 @@ var FResponseData: TMemoryStream;
     CurrentPatch, newPatch: TArray<Integer>;
     c, n: string;
 
+    {var} x, i: integer;
+
 begin
+  CheckForUpdatesButton.Enabled := true;
 //  CancelDownloadButton.Enabled := false;
-  TThread.Synchronize(nil,
-            procedure
-            begin
-            GifChange(false)
-            end);
+//  TThread.Synchronize(nil,
+//            procedure
+//            begin
+            GifChange(false);
+//            end);
 
   LResponse := AResponse;
 //  LSize := AResponse.ContentLength;
@@ -3274,16 +3836,17 @@ begin
   //Memo1.Lines.Add(Format('Downloaded %d MB', [AResponse.ContentLength div (1024*1024)]));
   If (LResponse.StatusCode <> 200) and (MirrorAttempt = false) then
   begin
-    Memo1.Lines.Add('Server returned status code: '+IntToStr(LResponse.StatusCode)+' Trying Mirror...');
-    TryMirror;
+    Memo1.Lines.Add('Error. Server returned status code: '+IntToStr(LResponse.StatusCode));
+    DownloadingLabel.Caption := 'Error. Server returned status code: '+IntToStr(LResponse.StatusCode);
+//    TryMirror;
     exit;
   end;
 
   LResponse := nil;
 
-  TaskRequestCompleted := TTask.Create (procedure ()
-  var x, i: integer;
-  begin
+//  TaskRequestCompleted := TTask.Create (procedure ()
+//  var x, i: integer;
+//  begin
 
     FResponsedata := TMemoryStream.Create;
     FResponsedata.Position := 0;
@@ -3296,21 +3859,26 @@ begin
       If downloadedfilename = 'RSSCT.exe' then
       begin
         DeleteFile('RSSCT.bak');
-        RenameFile('RSSCT.exe', 'RSSCT.bak');
+        If not RenameFile('RSSCT.exe', 'RSSCT.bak') then
+          MessageDlg('Could not remove the old version. Might not have the necessary permissions for this folder. You may have to try updating from the website richersimulations.com',mtWarning,mbOKCancel,0);
       end;
 
       FResponseData.SaveToFile(downloadedfilename);                       //UNCOMMENT THIS WHEN DONE TESTING<<<---------------------------------
       ReceivingData:= false;
-      CheckForUpdatesButton.Enabled := true;
+//      CheckForUpdatesButton.Enabled := true;
       DataReceived := true;
+
+      //Re-enable Installed Sims Tab
+      InstalledSimsTab.enabled := true;
+      DownloadingLabel.Caption := '';
 
       //If we've downloaded a new ACM, install
       If downloadedfilename = 'AutogenConfigurationMerger.exe' then
-      TThread.Synchronize(nil,
-            procedure
-            begin
+//      TThread.Synchronize(nil,
+//            procedure
+//            begin
             ACMButtonClick(nil);
-            end);
+//            end);
 
       //if we've downloaded version files we are about to compare version numbers
       If Compare then
@@ -3324,7 +3892,7 @@ begin
             currentManager := GetAppVersionInt(ParamStr(0));
             For i in InstalledProducts do
             begin
-              If sim = 'xp11' then
+              If ContainsText(sim, 'xp') then
                 c:= StringReplace(RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\'+RSXPProducts[i], 'Version'),'.','',[rfReplaceAll])
               else
                 c:= StringReplace(RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\'+RSProducts[i], 'Version'),'.','',[rfReplaceAll]);
@@ -3353,7 +3921,7 @@ begin
         For i in InstalledProducts do
         begin
           //get the new patch versions from the downloaded file
-          If sim = 'xp11' then
+          If ContainsText(sim, 'xp') then
             n:= ReturnStringBetween('['+RSXPProducts[i]+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini')
           else
             n:= ReturnStringBetween('['+RSProducts[i]+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
@@ -3375,20 +3943,20 @@ begin
         end
         else
         begin
-          x:= 0;
-          For i in InstalledProducts do
+//          x:= 0;
+          For i := 0 to length(InstalledProducts)-1 do
           begin
-            If newPatch[x]>currentPatch[x] then
+            If newPatch[i]>currentPatch[i] then
             begin
-              With InfoImages[i] do               //???check to ensure that this executes even when CheckForUpdates runs before the images are visible???
+              With InfoImages[InstalledProducts[i]] do               //???check to ensure that this executes even when CheckForUpdates runs before the images are visible???
               begin
                 {Picture.LoadFromFile('Images/Update.png');}
-                LoadImageResource(InfoImages[i], HInstance, 'Update');      //show the update notification
+                LoadImageResource(InfoImages[InstalledProducts[i]], HInstance, 'Update');      //show the update notification
                 Cursor := crHandPoint;
                 Hint := 'Update';
                 Enabled := true;
               end;
-              UpdateLabels[i].caption := VersionIntToStr(newPatch[x]); //place the version number of the patch on screen
+              UpdateLabels[InstalledProducts[i]].caption := VersionIntToStr(newPatch[x]); //place the version number of the patch on screen
             end;
             inc(x);
           end;
@@ -3409,7 +3977,10 @@ begin
           If ContainsText(downloadedfilename, 'patch') then
             Install('patch', downloadedfilename, PatchingProduct)
           else
-            Install('', downloadedfilename, PatchingProduct);
+          begin
+              If not ContainsText(downloadedfilename, '.ini') then
+                Install('', downloadedfilename, PatchingProduct);
+          end;
         end;
 
       end;
@@ -3419,8 +3990,8 @@ begin
       FResponseData.Free;
     end;
 
-  End);
-  TaskRequestCompleted.Start;
+//  End);
+//  TaskRequestCompleted.Start;
 
  end;
 
@@ -3429,9 +4000,14 @@ procedure TMainForm.NetHTTPRequestRequestError(const Sender: TObject;
 begin
   If MirrorAttempt = false then
   begin
-    Memo1.Lines.Add('Request Error. Trying Mirror...');
-    TryMirror;
+    Memo1.Lines.Add('Request Error.');
+    DownloadingLabel.Caption := 'Request Error.';
+//    TryMirror;
   end;
+  GifChange(false);
+
+  //renable sim choice
+  InstalledSimsTab.Enabled := true;
 //  CancelDownloadButton.Enabled := false;
 end;
 
@@ -3442,6 +4018,8 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 procedure TMainForm.P3Dv2ButtonClick(Sender: TObject);
@@ -3451,6 +4029,8 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 procedure TMainForm.P3Dv3ButtonClick(Sender: TObject);
@@ -3460,6 +4040,8 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 procedure TMainForm.P3Dv4ButtonClick(Sender: TObject);
@@ -3469,6 +4051,8 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 procedure TMainForm.P3Dv5ButtonClick(Sender: TObject);
@@ -3478,6 +4062,19 @@ begin
   SettingsPageControl.width := MainForm.Width - TabPanel.Width;
   TabPanel.Visible := true;
   TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
+end;
+
+procedure TMainForm.P3Dv6ButtonClick(Sender: TObject);
+begin
+  SetGlobalVariables('p3dv6', 8);
+  SettingsPageControl.ActivePageIndex := 2;
+  SettingsPageControl.width := MainForm.Width - TabPanel.Width;
+  TabPanel.Visible := true;
+  TabPanel.Show;
+  MainForm.Menu := MainMenu1;
+  SetMenu(Handle, MainMenu1.Handle);
 end;
 
 procedure TMainForm.PurgeRegButtonClick(Sender: TObject);
@@ -3504,9 +4101,11 @@ begin
       DeleteFile(GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\xml\RS_TBPB_Grass.xml');
       DeleteFile(GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\xml\RS_TBPB_Grass.off');
       DeleteFile(GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\xml\RS_TVSA_stands.xml');
+      DeleteFile(GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\xml\RS_TDPD.xml');
 
       RemoveDir(GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TBPB');
       RemoveDir(GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TVSA');
+      RemoveDir(GetEnvironmentVariable('ProgramData')+'\12bPilot\SODE\SimObjects\SODE_RS_TDPD');
 
       //------------ADD SODE RELATED FILES/FOLDERS ABOVE HERE--------------
 
@@ -3581,6 +4180,49 @@ begin
     end;
 end;
 
+
+procedure TMainForm.RWY26MWCLClickImageClick(Sender: TObject);
+begin
+  SettingsPageControl.ActivePageIndex := 10;
+end;
+
+procedure TMainForm.RWY26MWCLInfoImageClick(Sender: TObject);
+begin
+  With RWY26MWCLInfoImage do
+    begin
+      PatchingProduct := RSproducts[8];
+      If Hint = 'Buy Now...' then
+      begin
+//        If ContainsText(sim, 'xp') then
+//          xp link here
+//        else
+          ShellExecute(self.WindowHandle,'open','https://richersimulations.com',nil,nil, SW_SHOWNORMAL);
+      end;
+      If Hint = 'Update' then
+      begin
+//        newversion :=  ReturnStringBetween('['+PatchingProduct+']'+sLineBreak+'patchversion=', sLineBreak, 'newversion.ini');
+//        If FindFirst('*Kitts*'+newversion+'.exe',faAnyFile,SearchResult)<>0 then
+//        begin
+//          SettingsPageControl.ActivePageIndex := 7;
+          URL := patchURLs[5];
+//          downloadedfilename := FileNameFromURL(URL);
+//          Download(URL);
+//        end
+//        else
+//          Install('patch', SearchResult.Name, PatchingProduct);
+//        FindClose(SearchResult);
+       ShellExecute(self.WindowHandle,'open',PWideChar(URL),nil,nil, SW_SHOWNORMAL);
+      end;
+      visible := false;
+      UpdateLabels[8].Caption := '';
+    end;
+end;
+
+procedure TMainForm.RWY26MWCLTabSheetShow(Sender: TObject);
+begin
+    CaymanIslandsw2XPButton.Visible := ContainsText(sim, 'xp')
+end;
+
 //NOT THREAD SAFE... CANNOT BE RUN IN PARALLEL FOR... UPDATES MULTIPLE UI ELEMEMNTS
 procedure TMainForm.CheckForUpdates;
 {var
@@ -3594,7 +4236,7 @@ procedure TMainForm.CheckForUpdates;
 
 begin
 
-  If sim = 'xp11' then
+  If ContainsText(sim, 'xp') then
   begin
 
     InfoImages[0] := CommonInfoImage;
@@ -3617,18 +4259,20 @@ begin
     InfoImages[2] := Barbados2017InfoImage;
     InfoImages[3] := Antigua2018InfoImage;
     InfoImages[4] := Vincent2019InfoImage;
-    InfoImages[5] := Dominica2019InfoImage;
+    InfoImages[5] := Dominica2023InfoImage;
     InfoImages[6] := CommonInfoImage;
     InfoImages[7] := TBPB2020InfoImage;
+    InfoImages[8] := RWY26MWCLInfoImage;
 
     UpdateLabels[0] :=  GrenadaUpdateVersionLabel1;
     UpdateLabels[1] :=  Kitts2017UpdateVersionLabel1;
     UpdateLabels[2] :=  Barbados2017UpdateVersionLabel1;
     UpdateLabels[3] :=  Antigua2018UpdateVersionLabel1;
     UpdateLabels[4] :=  Vincent2019UpdateVersionLabel1;
-    UpdateLabels[5] :=  Dominica2019UpdateVersionLabel1;
+    UpdateLabels[5] :=  Dominica2023UpdateVersionLabel1;
     UpdateLabels[6] :=  CommonUpdateVersionLabel1;
     UpdateLabels[7] :=  TBPB2020UpdateVersionLabel1;
+    UpdateLabels[8] :=  RWY26MWCLUpdateVersionLabel1;
 
   end;
 
@@ -3642,29 +4286,41 @@ begin
 
 
     ReceivingData:= false;
-    CheckForUpdatesButton.Enabled := true;
+    CheckForUpdatesButton.Enabled := false;
     DataReceived := false;
     MirrorAttempt := false;
-    If sim = 'xp11' then
+    If ContainsText(sim, 'xp') then
       URL := versionURL_XP
     else
       URL := versionURL;
     downloadedfilename := FileNameFromURL(URL);
-    NetHTTPRequest.get(URL);
-    TThread.Synchronize(nil,
-            procedure
-            begin
-            GifChange(true)
-            end);
-    TaskTimeOut := TTask.Create(procedure
-            begin
-            CheckForTimeOut;
-            end);
-    TaskTimeOut.Start;
+    Compare := true;
+//    try
+
+      NetHTTPRequest.get(URL);
+//    TThread.Synchronize(nil,
+//            procedure
+//            begin
+            GifChange(true);
+//            end);
+//    TaskTimeOut := TTask.Create(procedure
+//            begin
+//            CheckForTimeOut;
+//            end);
+//    TaskTimeOut.Start;
+
+//    except
+//      Memo1.Lines.Add('Request error...');
+//      DownloadingLabel.Caption := 'Request error...';
+//    end;
+
     Memo1.Lines.Add('Checking for updates...');
+    DownloadingLabel.Caption := 'Checking for updates...';
 
     //ProgressBarDownload.Position := 0;
-    Compare := true;
+
+
+
 
 end;
 
@@ -3674,54 +4330,70 @@ begin
   CheckForUpdates;
 end;
 
-procedure TMainForm.TryMirror;
-
+procedure TMainForm.Close1Click(Sender: TObject);
 begin
-
-    ReceivingData:= false;
-    CheckForUpdatesButton.Enabled := true;
-    DataReceived := false;
-    MirrorAttempt := true;
-    If sim = 'xp11' then
-      URL := versionURLmirror_XP
-    else
-      URL := versionURLmirror;
-    downloadedfilename := FileNameFromURL(URL);
-    NetHTTPRequest.get(URL);
-    TThread.Synchronize(nil,
-            procedure
-            begin
-            GifChange(true)
-            end);
-    //ProgressBarDownload.Position := 0;
-    Compare := true;
+  MainForm.Close;
 end;
+
+//procedure TMainForm.TryMirror;
+//
+//begin
+//
+//    ReceivingData:= false;
+//    CheckForUpdatesButton.Enabled := false;
+//    DataReceived := false;
+//    MirrorAttempt := true;
+//    If ContainsText(sim, 'xp') then
+//      URL := versionURLmirror_XP
+//    else
+//      URL := versionURLmirror;
+//    downloadedfilename := FileNameFromURL(URL);
+//    Compare := true;
+//    NetHTTPRequest.get(URL);
+////    TThread.Synchronize(nil,
+////            procedure
+////            begin
+//            GifChange(true);
+////            end);
+//    //ProgressBarDownload.Position := 0;
+//
+//end;
 
 
 
 procedure TMainForm.Download(URL: string);
 begin
 
+  //disable choosing of sims, wait until downloads are finished.
+  InstalledSimsTab.Enabled := false;
+
+  GifChange(true);
+  Memo1.Lines.Add('Downloading updates...');
+  DownloadingLabel.Caption := 'Downloading updates...';
+  ProgressBarDownload.Position := 0;
+  ProgressBarDownload2.position := 0;
+  CheckForUpdatesButton.Enabled := false;
+
   TaskDownloadUpdate := TTask.Create (procedure ()
   begin
 
     ReceivingData:= false;
-    CheckForUpdatesButton.Enabled := true;
+//    CheckForUpdatesButton.Enabled := true;
     DataReceived := false;
     NetHTTPRequest.get(URL);
-    GifChange(true);
-    TThread.Synchronize(nil, procedure
-    begin
-      Memo1.Lines.Add('Downloading updates...');
-      ProgressBarDownload.Position := 0;
-      ProgressBarDownload2.position := 0;
-    end);
+//    GifChange(true);
+//    TThread.Synchronize(nil, procedure
+//    begin
+//      Memo1.Lines.Add('Downloading updates...');
+//      ProgressBarDownload.Position := 0;
+//      ProgressBarDownload2.position := 0;
+//    end);
     TaskTimeOut := TTask.Create (procedure
             begin
             CheckForTimeOut
             end);
     TaskTimeOut.Start;
-    Compare := false;
+//    Compare := false;
 
   end);
   TaskDownloadUpdate.Start;
@@ -3731,6 +4403,11 @@ end;
 procedure TMainForm.DownloadingImageClick(Sender: TObject);
 begin
   SettingsPageControl.ActivePageIndex := 7;
+end;
+
+procedure TMainForm.DownloadManager1Click(Sender: TObject);
+begin
+  DownloadManagerButton.Click;
 end;
 
 procedure TMainForm.DownloadManagerButtonClick(Sender: TObject);
@@ -3873,6 +4550,11 @@ begin
 
 end;
 
+procedure TMainForm.InstagramImageClick(Sender: TObject);
+begin
+  ShellExecute(self.WindowHandle,'open','https://www.instagram.com/richersimulations/',nil,nil, SW_SHOWNORMAL);
+end;
+
 function TMainForm.Install(ToInstall, filename, product: string): boolean;
 var
     stat, log: string;
@@ -3883,7 +4565,8 @@ begin
   ReturnCode := -1;
   If ToInstall = 'manager' then
   begin
-       Memo1.Lines.Add('Installing new configuration manager');
+       Memo1.Lines.Add('Installing new configuration manager...');
+       DownloadingLabel.Caption := 'Installing new configuration manager...';
        //delete the old, bring in the new
        DeleteFile('RSSCT.bak');
        RestartThisApp;
@@ -3927,13 +4610,13 @@ end;
 
 procedure TMainForm.InstalledSimsTabShow(Sender: TObject);
 begin
-
+    MainForm.Menu := nil;
 //TaskCheckForUpdates in background thread
-    TThread.Synchronize(nil,
-            procedure
-            begin
+//    TThread.Synchronize(nil,
+//            procedure
+//            begin
               CheckForUpdates;
-            end);
+//            end);
 end;
 
 function TMainForm.FileNameFromURL(URL:String):String;
@@ -4005,12 +4688,11 @@ begin
   For x in enabledproducts do
     begin
       //enable the required menu images for each installed prodcut according to simulator
-      If sim = 'xp11' then
+      If ContainsText(sim, 'xp') then
       begin
 
         Case x of
             0:begin
-              {CommonClickImage.Picture.LoadFromFile('Images/common.png');}
               LoadImageResource(CommonClickImage, HInstance, 'common');
               CommonClickImage.Enabled := true;
               CommonInfoImage.Picture.Graphic := nil;
@@ -4019,7 +4701,6 @@ begin
               CommonUpdateVersionLabel1.Caption := '';
               end;
             1:begin
-              {TBPB2020ClickImage.Picture.LoadFromFile('Images/TBPB2020.png');}
               LoadImageResource(TBPB2020ClickImage, HInstance, 'TBPB2020');
               TBPB2020ClickImage.Enabled := true;
               TBPB2020InfoImage.Picture.Graphic := nil;
@@ -4030,7 +4711,6 @@ begin
               TBPB2020UpdateVersionLabel1.Caption := '';
               end;
             2:begin
-              {Barbados2017ClickImage.Picture.LoadFromFile('Images/Barbados.png');}
               LoadImageResource(Barbados2017ClickImage, HInstance, 'Barbados');
               Barbados2017ClickImage.Enabled := true;
               Barbados2017InfoImage.Picture.Graphic := nil;
@@ -4042,7 +4722,6 @@ begin
               Barbados2017UpdateVersionLabel1.Caption := '';
               end;
             3:begin
-              {Vincent2019ClickImage.Picture.LoadFromFile('Images/StVincent.png');}
               LoadImageResource(Vincent2019ClickImage, HInstance, 'StVincent');
               Vincent2019ClickImage.Enabled := true;
               Vincent2019InfoImage.Picture.Graphic := nil;
@@ -4053,7 +4732,37 @@ begin
               Vincent2019VersionLabel2.Caption := Vincent2019VersionLabel1.Caption;
               Vincent2019UpdateVersionLabel1.Caption := '';
               end;
-            //--------------Add Future XP11 products here------------
+            4:begin
+              LoadImageResource(Dominica2023ClickImage, HInstance, 'Dominica');
+              Dominica2023ClickImage.Enabled := true;
+              Dominica2023InfoImage.Picture.Graphic := nil;
+              Dominica2023InfoImage.Hint := '';
+              Dominica2023InfoImage.Cursor := crDefault;
+              Dominica2023InfoImage.Enabled := false;
+              Dominica2023VersionLabel1.Caption := 'v'+RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\RS_Dominica_2023', 'Version');
+              Dominica2023VersionLabel2.Caption := Dominica2023VersionLabel1.Caption;
+              Dominica2023UpdateVersionLabel1.Caption := '';
+              end;
+            5:begin
+              LoadImageResource(RWY26MWCLClickImage, HInstance, 'RWY26MWCL');
+              RWY26MWCLClickImage.Enabled := true;
+              RWY26MWCLInfoImage.Picture.Graphic := nil;
+              RWY26MWCLInfoImage.Cursor := crDefault;
+              RWY26MWCLInfoImage.Enabled := false;
+              RWY26MWCLVersionLabel1.Caption := 'v'+RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\RWY26_MWCL', 'Version');
+//              RWY26MWCLVersionLabel2.Caption := RWY26MWCLVersionLabel1.Caption;
+              RWY26MWCLUpdateVersionLabel1.Caption := '';
+              end;
+            6:begin
+              LoadImageResource(SLDSOGSClickImage, HInstance, 'SLDSOGS');
+              SLDSOGSClickImage.Enabled := true;
+              SLDSOGSInfoImage.Picture.Graphic := nil;
+              SLDSOGSInfoImage.Cursor := crDefault;
+              SLDSOGSInfoImage.Enabled := false;
+              SLDSOGSVersionLabel1.Caption := 'v'+RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\SLD_SOGS', 'Version');
+//              SLDSOGSVersionLabel2.Caption := SLDSOGSVersionLabel1.Caption;
+              SLDSOGSUpdateVersionLabel1.Caption := '';
+              end;
             //--------------Add Future XP11 products here------------
             //--------------Add Future XP11 products here------------
           End;
@@ -4067,7 +4776,6 @@ begin
             //0:begin
       //        end;
             1:begin
-              {Kitts2017ClickImage.Picture.LoadFromFile('Images/Kitts.png');}
               LoadImageResource(Kitts2017ClickImage, HInstance, 'Kitts');
               Kitts2017ClickImage.Enabled := true;
               Kitts2017InfoImage.Picture.Graphic := nil;
@@ -4079,7 +4787,6 @@ begin
               Kitts2017UpdateVersionLabel1.Caption := '';
               end;
             2:begin
-              {Barbados2017ClickImage.Picture.LoadFromFile('Images/Barbados.png');}
               LoadImageResource(Barbados2017ClickImage, HInstance, 'Barbados');
               Barbados2017ClickImage.Enabled := true;
               Barbados2017InfoImage.Picture.Graphic := nil;
@@ -4091,7 +4798,6 @@ begin
               Barbados2017UpdateVersionLabel1.Caption := '';
               end;
             3:begin
-              {Antigua2018ClickImage.Picture.LoadFromFile('Images/Antigua.png');}
               LoadImageResource(Antigua2018ClickImage, HInstance, 'Antigua');
               Antigua2018ClickImage.Enabled := true;
               Antigua2018InfoImage.Picture.Graphic := nil;
@@ -4103,7 +4809,6 @@ begin
               Antigua2018UpdateVersionLabel1.Caption := '';
               end;
             4:begin
-              {Vincent2019ClickImage.Picture.LoadFromFile('Images/StVincent.png');}
               LoadImageResource(Vincent2019ClickImage, HInstance, 'StVincent');
               Vincent2019ClickImage.Enabled := true;
               Vincent2019InfoImage.Picture.Graphic := nil;
@@ -4114,10 +4819,18 @@ begin
               Vincent2019VersionLabel2.Caption := Vincent2019VersionLabel1.Caption;
               Vincent2019UpdateVersionLabel1.Caption := '';
               end;
-      //      5:begin
-      //        end;
+            5:begin
+              LoadImageResource(Dominica2023ClickImage, HInstance, 'Dominica');
+              Dominica2023ClickImage.Enabled := true;
+              Dominica2023InfoImage.Picture.Graphic := nil;
+              Dominica2023InfoImage.Hint := '';
+              Dominica2023InfoImage.Cursor := crDefault;
+              Dominica2023InfoImage.Enabled := false;
+              Dominica2023VersionLabel1.Caption := 'v'+RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\RS Dominica 2023', 'Version');
+              Dominica2023VersionLabel2.Caption := Dominica2023VersionLabel1.Caption;
+              Dominica2023UpdateVersionLabel1.Caption := '';
+              end;
             6:begin
-              {CommonClickImage.Picture.LoadFromFile('Images/common.png');}
               LoadImageResource(CommonClickImage, HInstance, 'common');
               CommonClickImage.Enabled := true;
               CommonInfoImage.Picture.Graphic := nil;
@@ -4126,7 +4839,6 @@ begin
               CommonUpdateVersionLabel1.Caption := '';
               end;
             7:begin
-              {TBPB2020ClickImage.Picture.LoadFromFile('Images/TBPB2020.png');}
               LoadImageResource(TBPB2020ClickImage, HInstance, 'TBPB2020');
               TBPB2020ClickImage.Enabled := true;
               TBPB2020InfoImage.Picture.Graphic := nil;
@@ -4135,6 +4847,26 @@ begin
               TBPB2020VersionLabel1.Caption := 'v'+RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\RS TBPB 2020', 'Version');
               TBPB2020VersionLabel2.Caption := TBPB2020VersionLabel1.Caption;
               TBPB2020UpdateVersionLabel1.Caption := '';
+              end;
+            8:begin
+              LoadImageResource(RWY26MWCLClickImage, HInstance, 'RWY26MWCL');
+              RWY26MWCLClickImage.Enabled := true;
+              RWY26MWCLInfoImage.Picture.Graphic := nil;
+              RWY26MWCLInfoImage.Cursor := crDefault;
+              RWY26MWCLInfoImage.Enabled := false;
+              RWY26MWCLVersionLabel1.Caption := 'v'+RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\RWY26MWCL', 'Version');
+//              RWY26MWCLVersionLabel2.Caption := RWY26MWCLVersionLabel1.Caption;
+              RWY26MWCLUpdateVersionLabel1.Caption := '';
+              end;
+            9:begin
+              LoadImageResource(SLDSOGSClickImage, HInstance, 'SLDSOGS');
+              SLDSOGSClickImage.Enabled := true;
+              SLDSOGSInfoImage.Picture.Graphic := nil;
+              SLDSOGSInfoImage.Cursor := crDefault;
+              SLDSOGSInfoImage.Enabled := false;
+              SLDSOGSVersionLabel1.Caption := 'v'+RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Richer Simulations\SkyLane Designs SOGS', 'Version');
+//              SLDSOGSVersionLabel2.Caption := SLDSOGSVersionLabel1.Caption;
+              SLDSOGSUpdateVersionLabel1.Caption := '';
               end;
             //--------------Add Future FS/P3D products here------------
             //--------------Add Future FS/P3D products here------------
@@ -4205,6 +4937,24 @@ begin
   end;
 end;
 
+procedure TMainForm.DynamicLightsBrightnessToggleSwitchClick(Sender: TObject);
+begin
+If DynamicLightsBrightnessToggleSwitch.state = tssOn then
+    begin
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_lightFFFFFF.fx', 'Falloff Exponent=0.6','Falloff Exponent=1.2');
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_spotlightFFFFFF02_20_68_68_2_0_1.fx', 'Falloff Exponent=0.6','Falloff Exponent=1.2');
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_spotlightFF801EC8_20_60_60_2_0_1.fx', 'Falloff Exponent=0.6','Falloff Exponent=1.2');
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_spotlightFFC08014_200_45_70_2_0_0.fx', 'Falloff Exponent=1.0','Falloff Exponent=2.0');
+    end
+    else
+    begin
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_lightFFFFFF.fx', 'Falloff Exponent=1.2','Falloff Exponent=0.6');
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_spotlightFFFFFF02_20_68_68_2_0_1.fx', 'Falloff Exponent=1.2','Falloff Exponent=0.6');
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_spotlightFF801EC8_20_60_60_2_0_1.fx', 'Falloff Exponent=1.2','Falloff Exponent=0.6');
+      ReplaceXMLEntry(RicherSimsLocation+'Effects\fx_spotlightFFC08014_200_45_70_2_0_0.fx', 'Falloff Exponent=2.0','Falloff Exponent=1.0');
+    end;
+end;
+
 procedure TMainForm.DynamicLightSwitch(DLImage: TImage; AnSODEProduct: TSODEProduct; AnApronLightsToggleSwitch: TToggleSwitch; DynamicLightName, BGLNameNoExt: string);
 begin
 
@@ -4268,6 +5018,11 @@ begin
 end;
 
 function TMainForm.SearchForRSCommonEntries(SL: TStringList): TObjectList<TRSCommonEntries>;
+// Scans a string list (from scenery.cfg or Add-on.xml) for RS Common package
+// entries. Returns a list of TRSCommonEntries objects with the line position,
+// source file, resolved path, and folder creation date for each match.
+// Autogen-related entries are ignored — only scenery layer entries are returned.
+// Used by CheckForRSCommonConflicts to detect duplicate RS Common installations.
 var x:integer;
     prefix: string;
     RSCommonEntry: TRSCommonEntries;
@@ -4300,11 +5055,14 @@ begin
             If not FileExists(Filename) then //account for different documents folder
               filename := GetSpecialFolder(CSIDL_PROFILE)+'Documents\Prepar3D v'+v+' Add-ons\Richer Simulations\Add-on.xml';
             path := ReturnStringBetweenText('<Path>','</Path>',SL.Strings[x]);
+            If ((RightStr(path,8) = '\Scenery') or (RightStr(path,8) = '\Texture')) then
+              path := leftstr(path, length(path)-8);
           end;
 
           datecreated := GetFolderCreationDate(path);
         end;
-        result.add(RSCommonEntry)
+        if FileExists(RSCommonEntry.path) then
+          result.add(RSCommonEntry)
       end;
     end;
   end;
@@ -4448,12 +5206,15 @@ begin
     TimeSince := TThread.GetTickCount - FGlobalStart;
   If TimeSince >= NetHTTPRequest.ConnectionTimeout then
   begin
-    TThread.Synchronize(nil,
-            procedure
-            begin
+//    TThread.Synchronize(nil,
+//            procedure
+//            begin
             GifChange(false);
-            Memo1.Lines.Add('Connection Timed Out');
-            end);
+            Memo1.Lines.Add('Connection Timed Out.');
+            DownloadingLabel.Caption := 'Connection Timed Out.';
+            InstalledSimsTab.Enabled := true;
+//  result := true;
+//            end);
   end;
 end;
 
